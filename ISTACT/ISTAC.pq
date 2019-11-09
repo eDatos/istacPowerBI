@@ -1,4 +1,4 @@
-﻿// This file contains your Data Connector logic
+﻿[Version = "1.0.0"]
 section ISTAC;
 
 [DataSource.Kind="ISTAC", Publish="ISTAC.Publish"]
@@ -215,6 +215,7 @@ in
     AllRows;
 
 ISTAC = [
+     TestConnection = (dataSourcePath) => { "ISTAC.Contents" },
     Authentication = [
         Implicit = []
     ],
