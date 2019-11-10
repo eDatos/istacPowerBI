@@ -14,14 +14,13 @@ NavigationType = type function () as table meta [
         ]}
     ];
 
-
  Navigation = () =>
     let
         objects = #table(
             {"Name",       "Key",        "Data",                           "ItemKind", "ItemName", "IsLeaf"},{
             {"Indicadores",      "indicators",  ISTAC.IndicatorNavTable() , "Folder",    "Indicator",    false},
-            {"Cubos",      "Cubos",  null, "Folder",    "Cubos",    false},
-            {"Clasificaciones",      "Clasificaciones",  null, "Folder",    "Clasificaciones",    false}
+            {"Cubos",      "Cubos",  ISTAC.Cubos(), "Folder",    "Cubos",    false},
+            {"Recursos Estructurales",      "Clasificaciones",  null, "Folder",    "Clasificaciones",    false}
             }),
         NavTable = Table.ToNavigationTable(objects, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf") 
     in
@@ -84,9 +83,150 @@ IndicatorSubTables = (x as table) =>
     in 
         ToNavTable;
 
+ISTAC.AlternatePagination = (url as text, selector as text ) as table =>
+let
+Source = List.Generate( ()=> 
+[JsonFile = Json.Document(  Web.Contents(url,[Headers=[Accept="application/json"]]) ), nextPage = JsonFile[nextLink]? ],
+each [JsonFile] <> null, 
+each [JsonFile = try Json.Document( Web.Contents([nextPage],[Headers=[Accept="application/json"]])) otherwise null , nextPage =try Record.Field(JsonFile, "nextLink") otherwise null  ],
+each Record.Field([JsonFile], selector )),
+    Custom1 = Table.FromRecords(  List.Combine( Source ), null, MissingField.UseNull)
+in
+    Custom1;
+
+ISTAC.Cubos = ()=>
+    let
+    Source = ISTAC.AlternatePagination("https://www3.gobiernodecanarias.org/istac/api/statistical-resources/v1.0/datasets?lang=es&limit=1000","dataset"),
+    #"Expanded name" = Table.ExpandRecordColumn(Source, "name", {"text"}, {"text"}),
+    #"Expanded text" = Table.ExpandListColumn(#"Expanded name", "text"),
+    #"Expanded text1" = Table.ExpandRecordColumn(#"Expanded text", "text", {"value", "lang"}, {"value", "lang"}),
+    #"Expanded selfLink" = Table.ExpandRecordColumn(#"Expanded text1", "selfLink", {"href"}, {"href"}),
+    #"Added Custom" = Table.AddColumn(#"Expanded selfLink", "Custom", each Record.FromList( List.LastN( Text.Split([href], "/"),3), {"Agency","Resource","Version"})),
+    #"Expanded Custom" = Table.ExpandRecordColumn(#"Added Custom", "Custom", {"Agency", "Resource", "Version"}, {"Agency", "Resource", "Version"}),
+    #"Grouped Rows" = Table.Group(#"Expanded Custom", {"Agency"}, {{"Count", each _, type table [id=text, urn=text, href=text, value=text, lang=text, kind=text, Agency=text, Resource=text, Version=text]}}),
+    #"Added Custom1" = Table.AddColumn(#"Grouped Rows", "Custom", each Table.Group([Count], {"Resource", "value"}, {{"Count", each _}})),
+    #"Removed Columns" = Table.RemoveColumns(#"Added Custom1",{"Count"}),
+    #"Added Custom2" = Table.AddColumn(#"Removed Columns", "Data", each ISTAC.CubosNivel2Transformar([Custom])),
+    #"Removed Columns1" = Table.RemoveColumns(#"Added Custom2",{"Custom"}),
+    #"Renamed Columns" = Table.RenameColumns(#"Removed Columns1",{{"Agency", "Key"}}),
+    #"Duplicated Column" = Table.DuplicateColumn(#"Renamed Columns", "Key", "Name"),
+    #"Duplicated Column1" = Table.DuplicateColumn(#"Duplicated Column", "Name", "ItemName"),
+    #"Added Custom3" = Table.AddColumn(#"Duplicated Column1", "IsLeaf", each false),
+    #"Added Custom4" = Table.AddColumn(#"Added Custom3", "ItemKind", each "Folder"),
+    ToNavTable = Table.ToNavigationTable(  #"Added Custom4", {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
+in
+  ToNavTable;
+
+ISTAC.CubosNivel2Transformar = (x as table) as table =>
+let 
+    #"Renamed Columns" = Table.RenameColumns(x,{{"Resource", "Key"}, {"value", "Name"}}),
+    #"Added Custom" = Table.AddColumn(#"Renamed Columns", "ItemKind", each "Folder"),
+    #"Added Custom1" = Table.AddColumn(#"Added Custom", "IsLeaf", each false),
+    #"Duplicated Column" = Table.DuplicateColumn(#"Added Custom1", "Name", "ItemName"),
+    #"Added Custom2" = Table.AddColumn(#"Duplicated Column", "Data", each ISTAC.CubosNivel3Transformar([Count])),
+    ToNavTable =Table.ToNavigationTable(#"Added Custom2", {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf") 
+in
+    ToNavTable;
+
+ISTAC.CubosNivel3Transformar = (x as table) as table =>
+let
+    #"Removed Other Columns" = Table.SelectColumns(x,{"href", "Version"}),
+    #"Renamed Columns1" = Table.RenameColumns(#"Removed Other Columns",{{"Version", "Key"}}),
+    #"Duplicated Column1" = Table.DuplicateColumn(#"Renamed Columns1", "Key", "Name"),
+    #"Duplicated Column2" = Table.DuplicateColumn(#"Duplicated Column1", "Name", "ItemName"),
+    #"Added Custom2" = Table.AddColumn(#"Duplicated Column2", "IsLeaf", each true),
+    #"Added Custom3" = Table.AddColumn(#"Added Custom2", "ItemKind", each "Table"),
+    #"Added Custom4" = Table.AddColumn(#"Added Custom3", "Data", each ISTAC.Dataset([href])),
+    ToNavTable =Table.ToNavigationTable(#"Added Custom4", {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf") 
+    in 
+  ToNavTable;
+
+ISTAC.Dataset = (url as text) as table =>
+let
+    x = Binary.Buffer( Web.Contents(url , [Headers=[Accept="application/json"]]) ),
+    Source = Json.Document(x),
+    data = Source[data],
+    observation = Text.Split( data[observations], "|"),
+    Custom2 = Table.FromRecords(  data[dimensions]?[dimension]? ),
+    #"Expanded representations" = Table.ExpandRecordColumn(Custom2, "representations", {"representation"}, {"representation"}),
+    #"Added Custom" = Table.AddColumn(#"Expanded representations", "Custom", each Table.FromRecords([representation], null, MissingField.UseNull)),
+    #"Removed Columns" = Table.RemoveColumns(#"Added Custom",{"representation"}),
+    Order = #"Removed Columns"[dimensionId],
+    Custom3 = Table.Transpose( #"Removed Columns" ),
+    #"Promoted Headers" = Table.PromoteHeaders(Custom3, [PromoteAllScalars=true]),
+    TotalDimensions = List.Count( Order ),
+    recursiveExpand = (x as table, y as number) => 
+          let 
+	     OriginalColumnNames = {"code", "index"},
+             ColumnToExpand = Order{y-1},
+             NewColumnNames = List.Transform(OriginalColumnNames, each ColumnToExpand &"."& _),
+             Calculation =  Table.ExpandTableColumn(x,ColumnToExpand, OriginalColumnNames , NewColumnNames),
+	     Check = if y = TotalDimensions then Calculation else @recursiveExpand (Calculation, y +1)
+ 	   in  
+	     Check,
+     Custom5= recursiveExpand (#"Promoted Headers" , 1),
+      ColumnsToOrder = List.Transform( Order, each _ &".index"),
+     ListOrder = List.Zip({ColumnsToOrder,List.Repeat({Order.Ascending}, List.Count(Order))}),
+      #"Sorted Rows" = Table.Sort(Custom5,ListOrder),
+    Custom6 = List.Select( Table.ColumnNames( #"Sorted Rows"), each Text.EndsWith(_, ".code")),
+    Custom7 = Table.SelectColumns(#"Sorted Rows", Custom6),
+     Custom8 = List.Zip( {Custom6, List.Transform( Custom6, each Text.Replace(_, ".code",""))} ),
+    Custom9 = Custom7,
+    #"Renamed Columns" = Table.RenameColumns(Custom9,Custom8),
+    Custom10 = #"Renamed Columns",
+    Custom11 = Table.FromColumns( Table.ToColumns(Custom10) & {observation}, Order & {"Value"}),
+        #"Changed Type" = Table.TransformColumnTypes(Custom11, List.Zip( {Order, List.Repeat(  {type text}, List.Count(Order))}) ),
+    #"Changed Type1" = Table.TransformColumnTypes(#"Changed Type",{{"Value", type number}}),
+    #"Replaced Errors" = Table.ReplaceErrorValues(#"Changed Type1", {{"Value", null}}),
+        #"Pivoted Column" = try  Table.Pivot(#"Replaced Errors", List.Distinct( #"Replaced Errors"[INDICADORES]), "INDICADORES", "Value")
+otherwise Table.Pivot(#"Replaced Errors", List.Distinct( #"Replaced Errors"[MEDIDAS]), "MEDIDAS", "Value")
+in
+try #"Pivoted Column" otherwise #"Replaced Errors";
+
+TransformBinary.Cubos = (url as text) as table =>
+let
+    x = Binary.Buffer( Web.Contents(url , [Headers=[Accept="application/json"]]) ),
+    Source = Json.Document(x),
+    data = Source[data],
+    observation = Text.Split( data[observations], "|"),
+    Custom2 = Table.FromRecords(  data[dimensions]?[dimension]? ),
+    #"Expanded representations" = Table.ExpandRecordColumn(Custom2, "representations", {"representation"}, {"representation"}),
+    #"Added Custom" = Table.AddColumn(#"Expanded representations", "Custom", each Table.FromRecords([representation], null, MissingField.UseNull)),
+    #"Removed Columns" = Table.RemoveColumns(#"Added Custom",{"representation"}),
+    Order = #"Removed Columns"[dimensionId],
+    Custom3 = Table.Transpose( #"Removed Columns" ),
+    #"Promoted Headers" = Table.PromoteHeaders(Custom3, [PromoteAllScalars=true]),
+    TotalDimensions = List.Count( Order ),
+    recursiveExpand = (x as table, y as number) => 
+          let 
+	     OriginalColumnNames = {"code", "index"},
+             ColumnToExpand = Order{y-1},
+             NewColumnNames = List.Transform(OriginalColumnNames, each ColumnToExpand &"."& _),
+             Calculation =  Table.ExpandTableColumn(x,ColumnToExpand, OriginalColumnNames , NewColumnNames),
+	     Check = if y = TotalDimensions then Calculation else @recursiveExpand (Calculation, y +1)
+ 	   in  
+	     Check,
+     Custom5= recursiveExpand (#"Promoted Headers" , 1),
+      ColumnsToOrder = List.Transform( Order, each _ &".index"),
+     ListOrder = List.Zip({ColumnsToOrder,List.Repeat({Order.Ascending}, List.Count(Order))}),
+      #"Sorted Rows" = Table.Sort(Custom5,ListOrder),
+    Custom6 = List.Select( Table.ColumnNames( #"Sorted Rows"), each Text.EndsWith(_, ".code")),
+    Custom7 = Table.SelectColumns(#"Sorted Rows", Custom6),
+     Custom8 = List.Zip( {Custom6, List.Transform( Custom6, each Text.Replace(_, ".code",""))} ),
+    Custom9 = Custom7,
+    #"Renamed Columns" = Table.RenameColumns(Custom9,Custom8),
+    Custom10 = #"Renamed Columns",
+    Custom11 = Table.FromColumns( Table.ToColumns(Custom10) & {observation}, Order & {"Value"}),
+        #"Changed Type" = Table.TransformColumnTypes(Custom11, List.Zip( {Order, List.Repeat(  {type text}, List.Count(Order))}) ),
+    #"Changed Type1" = Table.TransformColumnTypes(#"Changed Type",{{"Value", type number}}),
+    #"Replaced Errors" = Table.ReplaceErrorValues(#"Changed Type1", {{"Value", null}}),
+        #"Pivoted Column" = Table.Pivot(#"Replaced Errors", List.Distinct(#"Replaced Errors"[INDICADORES]), "INDICADORES", "Value")
+in
+#"Pivoted Column";
+
 TransformBinary.Indicadores= (url as text) as table =>
 let
-x= Binary.Buffer( Web.Contents(url & "/data") ),
+x= Binary.Buffer( Web.Contents(url & "/data", [Headers=[Accept="application/json"]]) ),
 JSON = Json.Document(x),
     Custom2 = JSON,
     Order = Custom2[format],
@@ -156,7 +296,7 @@ in
 ISTAC.SystemIndicators = () =>
     let
     Source = ISTAC.SystemIndicatorPagination("https://www.gobiernodecanarias.org/istac/api/indicators/v1.0/indicatorsSystems", 1000),
-    #"Added Custom" = Table.AddColumn(Source, "Custom", each ISTAC.SystemIndicatorPagination([selfLink]&"/indicatorsInstances", 40)),
+    #"Added Custom" = Table.AddColumn(Source, "Custom", each ISTAC.SystemIndicatorPagination([selfLink]&"/indicatorsInstances", 1000)),
     #"Expanded title" = Table.ExpandRecordColumn(#"Added Custom", "title", {"__default__"}, {"title.__default__"}),
     #"Renamed Columns" = Table.RenameColumns(#"Expanded title",{{"id", "Key"}, {"title.__default__", "Name"}}),
     #"Removed Other Columns" = Table.SelectColumns(#"Renamed Columns",{"Key", "Name", "Custom"}),
@@ -201,18 +341,6 @@ each Table.FromRecords( Record.Field( [Call], "items" ), null, MissingField.UseN
     Custom1 = Table.Combine(Source)
 in
     Custom1;
-
-ISTAC.IndicatorPagination = (url as text ) as table =>
-let
-    Source = List.Generate( ()=> 
-[JsonFile = Json.Document(  Web.Contents(url,[Headers=[Accept="application/json"]]) ), nextPage = JsonFile[nextLink]? ],
-each [JsonFile] <> null, 
-each [JsonFile = try Json.Document( Web.Contents([nextPage])) otherwise null , nextPage = JsonFile[nexLink]? ],
-each Record.Field( [JsonFile], "items")),
-CombineLists = List.Combine( Source),
-AllRows= Table.FromRecords(CombineLists, null, MissingField.UseNull)
-in
-    AllRows;
 
 ISTAC = [
      TestConnection = (dataSourcePath) => { "ISTAC.Contents" },
