@@ -95,7 +95,7 @@ in
     Custom1;
 
 ISTAC.Cubos = ()=>
-    let
+   let
     Source = ISTAC.AlternatePagination("https://www3.gobiernodecanarias.org/istac/api/statistical-resources/v1.0/datasets?lang=es&limit=1000","dataset"),
     #"Expanded name" = Table.ExpandRecordColumn(Source, "name", {"text"}, {"text"}),
     #"Expanded text" = Table.ExpandListColumn(#"Expanded name", "text"),
@@ -103,47 +103,36 @@ ISTAC.Cubos = ()=>
     #"Expanded selfLink" = Table.ExpandRecordColumn(#"Expanded text1", "selfLink", {"href"}, {"href"}),
     #"Added Custom" = Table.AddColumn(#"Expanded selfLink", "Custom", each Record.FromList( List.LastN( Text.Split([href], "/"),3), {"Agency","Resource","Version"})),
     #"Expanded Custom" = Table.ExpandRecordColumn(#"Added Custom", "Custom", {"Agency", "Resource", "Version"}, {"Agency", "Resource", "Version"}),
-    #"Grouped Rows" = Table.Group(#"Expanded Custom", {"Agency"}, {{"Count", each _, type table [id=text, urn=text, href=text, value=text, lang=text, kind=text, Agency=text, Resource=text, Version=text]}}),
-    #"Added Custom1" = Table.AddColumn(#"Grouped Rows", "Custom", each Table.Group([Count], {"Resource", "value"}, {{"Count", each _}})),
-    #"Removed Columns" = Table.RemoveColumns(#"Added Custom1",{"Count"}),
-    #"Added Custom2" = Table.AddColumn(#"Removed Columns", "Data", each ISTAC.CubosNivel2Transformar([Custom])),
-    #"Removed Columns1" = Table.RemoveColumns(#"Added Custom2",{"Custom"}),
-    #"Renamed Columns" = Table.RenameColumns(#"Removed Columns1",{{"Agency", "Key"}}),
+    #"Grouped Rows" = Table.Group(#"Expanded Custom", {"Agency", "value", "lang", "Resource"}, {{"Count", each _, type table [id=text, urn=text, href=text, value=text, lang=text, kind=text, Agency=text, Resource=text, Version=text]}}),
+    #"Removed Columns" = Table.RemoveColumns(#"Grouped Rows",{"Count", "lang"}),
+    #"Grouped Rows1" = Table.Group(#"Removed Columns", {"Agency"}, {{"Count", each _, type table [Agency=text, value=text, Resource=text]}}),
+    #"Renamed Columns" = Table.RenameColumns(#"Grouped Rows1",{{"Agency", "Key"}}),
     #"Duplicated Column" = Table.DuplicateColumn(#"Renamed Columns", "Key", "Name"),
     #"Duplicated Column1" = Table.DuplicateColumn(#"Duplicated Column", "Name", "ItemName"),
-    #"Added Custom3" = Table.AddColumn(#"Duplicated Column1", "IsLeaf", each false),
-    #"Added Custom4" = Table.AddColumn(#"Added Custom3", "ItemKind", each "Folder"),
-    ToNavTable = Table.ToNavigationTable(  #"Added Custom4", {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
+    #"Added Custom1" = Table.AddColumn(#"Duplicated Column1", "IsLeaf", each false),
+    #"Added Custom2" = Table.AddColumn(#"Added Custom1", "ItemKind", each "Folder"),
+    #"Added Custom3" = Table.AddColumn(#"Added Custom2", "Data", each ISTAC.CubosNivel2Transformar([Count])),
+    #"Removed Columns1" = Table.RemoveColumns(#"Added Custom3",{"Count"}),
+    ToNavTable = Table.ToNavigationTable(  #"Removed Columns1", {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
 in
   ToNavTable;
 
 ISTAC.CubosNivel2Transformar = (x as table) as table =>
 let 
-    #"Renamed Columns" = Table.RenameColumns(x,{{"Resource", "Key"}, {"value", "Name"}}),
-    #"Added Custom" = Table.AddColumn(#"Renamed Columns", "ItemKind", each "Folder"),
-    #"Added Custom1" = Table.AddColumn(#"Added Custom", "IsLeaf", each false),
-    #"Duplicated Column" = Table.DuplicateColumn(#"Added Custom1", "Name", "ItemName"),
-    #"Added Custom2" = Table.AddColumn(#"Duplicated Column", "Data", each ISTAC.CubosNivel3Transformar([Count])),
-    ToNavTable =Table.ToNavigationTable(#"Added Custom2", {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf") 
+      #"Changed Type" = Table.TransformColumnTypes(x,{{"Resource", type text}}),
+    #"Added Custom3" = Table.AddColumn(#"Changed Type", "Data", each ISTAC.Dataset("https://www3.gobiernodecanarias.org/istac/api/statistical-resources/v1.0/datasets/ISTAC/"&Text.From([Resource])&"/~latest")),
+    RemoveAgency = Table.RemoveColumns(#"Added Custom3", {"Agency"} ),
+    RenameColumns = Table.RenameColumns(RemoveAgency,{{"Resource", "Key"}, {"value", "Name"}}),
+    AddItemKind = Table.AddColumn(RenameColumns, "ItemKind", each "Table"),
+    AddIsLeaf = Table.AddColumn(AddItemKind, "IsLeaf", each true),
+    AddItemName =  Table.DuplicateColumn(AddIsLeaf, "Name", "ItemName"),
+    ToNavTable =Table.ToNavigationTable(AddItemName, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf") 
 in
     ToNavTable;
 
-ISTAC.CubosNivel3Transformar = (x as table) as table =>
-let
-    #"Removed Other Columns" = Table.SelectColumns(x,{"href", "Version"}),
-    #"Renamed Columns1" = Table.RenameColumns(#"Removed Other Columns",{{"Version", "Key"}}),
-    #"Duplicated Column1" = Table.DuplicateColumn(#"Renamed Columns1", "Key", "Name"),
-    #"Duplicated Column2" = Table.DuplicateColumn(#"Duplicated Column1", "Name", "ItemName"),
-    #"Added Custom2" = Table.AddColumn(#"Duplicated Column2", "IsLeaf", each true),
-    #"Added Custom3" = Table.AddColumn(#"Added Custom2", "ItemKind", each "Table"),
-    #"Added Custom4" = Table.AddColumn(#"Added Custom3", "Data", each ISTAC.Dataset([href])),
-    ToNavTable =Table.ToNavigationTable(#"Added Custom4", {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf") 
-    in 
-  ToNavTable;
-
 ISTAC.Dataset = (url as text) as table =>
 let
-    x = Binary.Buffer( Web.Contents(url , [Headers=[Accept="application/json"]]) ),
+  x = Binary.Buffer( Web.Contents(url , [Headers=[Accept="application/json"]]) ),
     Source = Json.Document(x),
     data = Source[data],
     observation = Text.Split( data[observations], "|"),
@@ -178,10 +167,20 @@ let
         #"Changed Type" = Table.TransformColumnTypes(Custom11, List.Zip( {Order, List.Repeat(  {type text}, List.Count(Order))}) ),
     #"Changed Type1" = Table.TransformColumnTypes(#"Changed Type",{{"Value", type number}}),
     #"Replaced Errors" = Table.ReplaceErrorValues(#"Changed Type1", {{"Value", null}}),
-        #"Pivoted Column" = try  Table.Pivot(#"Replaced Errors", List.Distinct( #"Replaced Errors"[INDICADORES]), "INDICADORES", "Value")
-otherwise Table.Pivot(#"Replaced Errors", List.Distinct( #"Replaced Errors"[MEDIDAS]), "MEDIDAS", "Value")
+        #"Pivoted Column" =  try  Table.Pivot(#"Replaced Errors", List.Distinct( #"Replaced Errors"[INDICADORES]), "INDICADORES", "Value")
+otherwise Table.Pivot(#"Replaced Errors", List.Distinct( #"Replaced Errors"[MEDIDAS]), "MEDIDAS", "Value"),
+ metadata = Source[metadata],
+    measureCoverages = metadata[measureCoverages],
+    resource = measureCoverages[resource],
+    Custom1 = Table.FromRecords( resource ),
+    #"Expanded name" = Table.ExpandRecordColumn(Custom1, "name", {"text"}, {"name.text"}),
+    #"Expanded name.text" = Table.ExpandListColumn(#"Expanded name", "name.text"),
+    #"Expanded name.text1" = Table.ExpandRecordColumn(#"Expanded name.text", "name.text", {"value", "lang"}, {"value", "lang"}),
+    #"Removed Other Columns" = Table.SelectColumns(#"Expanded name.text1",{"id", "value"}),
+    ReplaceHeaders = List.Zip( Table.ToColumns( #"Removed Other Columns" ) ),
+    #"Renamed Columns1" = Table.RenameColumns(#"Pivoted Column",ReplaceHeaders)
 in
-try #"Pivoted Column" otherwise #"Replaced Errors";
+   try #"Renamed Columns1" otherwise  #"Replaced Errors"  ;
 
 TransformBinary.Cubos = (url as text) as table =>
 let
