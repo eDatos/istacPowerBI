@@ -20,7 +20,7 @@ NavigationType = type function () as table meta [
             {"Name",       "Key",        "Data",                           "ItemKind", "ItemName", "IsLeaf"},{
             {"Indicadores",      "indicators",  ISTAC.IndicatorNavTable() , "Folder",    "Indicator",    false},
             {"Cubos",      "Cubos",  ISTAC.Cubos(), "Folder",    "Cubos",    false},
-            {"Recursos Estructurales",      "Clasificaciones",  null, "Folder",    "Clasificaciones",    false}
+            {"Recursos Estructurales",      "Clasificaciones",  ISTAC.VariableFamilies() , "Folder",    "Clasificaciones",    false}
             }),
         NavTable = Table.ToNavigationTable(objects, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf") 
     in
@@ -340,6 +340,42 @@ each Table.FromRecords( Record.Field( [Call], "items" ), null, MissingField.UseN
     Custom1 = Table.Combine(Source)
 in
     Custom1;
+
+ISTAC.VariableFamilies = () as table =>
+  let
+    Source = ISTAC.AlternatePagination("https://www3.gobiernodecanarias.org/istac/api/structural-resources/v1.0/variablefamilies?limit=25", "variableFamily"),
+    #"Expanded selfLink" = Table.ExpandRecordColumn(Source, "selfLink", {"kind", "href"}, {"kind.1", "href"}),
+    #"Expanded name" = Table.ExpandRecordColumn(#"Expanded selfLink", "name", {"text"}, {"text"}),
+    #"Expanded text" = Table.ExpandListColumn(#"Expanded name", "text"),
+    #"Expanded text1" = Table.ExpandRecordColumn(#"Expanded text", "text", {"value", "lang"}, {"value", "lang"}),
+    #"Filtered Rows" = Table.SelectRows(#"Expanded text1", each [lang] = "es"),
+    #"Added Custom" = Table.AddColumn(#"Filtered Rows", "Custom", each ISTAC.AlternatePagination( [href]&"/variables?limit=2", "variable")),
+    #"Renamed Columns" = Table.RenameColumns(#"Added Custom",{{"id", "Key"}, {"value", "Name"}}),
+    #"Duplicated Column" = Table.DuplicateColumn(#"Renamed Columns", "Name", "ItemName"),
+    #"Added Custom1" = Table.AddColumn(#"Duplicated Column", "IsLeaf", each false),
+    #"Added Custom2" = Table.AddColumn(#"Added Custom1", "ItemKind", each "Folder"),
+    #"Removed Other Columns" = Table.SelectColumns(#"Added Custom2",{"IsLeaf", "ItemKind", "ItemName", "Custom", "Name", "Key"}),
+    #"Added Custom3" = Table.AddColumn(#"Removed Other Columns", "Data", each ISTAC.VariableFamilies2ndLevel([Custom])),
+    #"Removed Columns" = Table.RemoveColumns(#"Added Custom3",{"Custom"}),
+     ToNavTable = Table.ToNavigationTable( #"Removed Columns", {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
+in
+ToNavTable;
+
+ISTAC.VariableFamilies2ndLevel = (x as table) => 
+let
+    #"Expanded name" = Table.ExpandRecordColumn(x, "name", {"text"}, {"text"}),
+    #"Expanded text" = Table.ExpandListColumn(#"Expanded name", "text"),
+    #"Expanded text1" = Table.ExpandRecordColumn(#"Expanded text", "text", {"value", "lang"}, {"value", "lang"}),
+    #"Expanded selfLink" = Table.ExpandRecordColumn(#"Expanded text1", "selfLink", {"kind", "href"}, {"kind.1", "href"}),
+    #"Added Custom" = Table.AddColumn(#"Expanded selfLink", "Data", each ISTAC.AlternatePagination([href]&"/variableelements", "variableElement") ),
+    #"Removed Other Columns" = Table.SelectColumns( #"Added Custom" ,{"id", "Data", "value"}),
+    #"Renamed Columns" = Table.RenameColumns(#"Removed Other Columns",{{"value", "Name"}, {"id", "Key"}}),
+    #"Duplicated Column" = Table.DuplicateColumn(#"Renamed Columns", "Name", "ItemName"),
+    #"Added Custom1" = Table.AddColumn(#"Duplicated Column", "IsLeaf", each true),
+    AddItemKind = Table.AddColumn( #"Added Custom1", "ItemKind", each "Table"),
+     ToNavTable = Table.ToNavigationTable( AddItemKind, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
+in
+ToNavTable;
 
 ISTAC = [
      TestConnection = (dataSourcePath) => { "ISTAC.Contents" },
