@@ -96,6 +96,7 @@ in
 
 ISTAC.Cubos = ()=>
    let
+
     Source = ISTAC.AlternatePagination("https://www3.gobiernodecanarias.org/istac/api/statistical-resources/v1.0/datasets?lang=es&limit=1000","dataset"),
     #"Expanded name" = Table.ExpandRecordColumn(Source, "name", {"text"}, {"text"}),
     #"Expanded text" = Table.ExpandListColumn(#"Expanded name", "text"),
@@ -105,30 +106,16 @@ ISTAC.Cubos = ()=>
     #"Expanded Custom" = Table.ExpandRecordColumn(#"Added Custom", "Custom", {"Agency", "Resource", "Version"}, {"Agency", "Resource", "Version"}),
     #"Grouped Rows" = Table.Group(#"Expanded Custom", {"Agency", "value", "lang", "Resource"}, {{"Count", each _, type table [id=text, urn=text, href=text, value=text, lang=text, kind=text, Agency=text, Resource=text, Version=text]}}),
     #"Removed Columns" = Table.RemoveColumns(#"Grouped Rows",{"Count", "lang"}),
-    #"Grouped Rows1" = Table.Group(#"Removed Columns", {"Agency"}, {{"Count", each _, type table [Agency=text, value=text, Resource=text]}}),
-    #"Renamed Columns" = Table.RenameColumns(#"Grouped Rows1",{{"Agency", "Key"}}),
-    #"Duplicated Column" = Table.DuplicateColumn(#"Renamed Columns", "Key", "Name"),
-    #"Duplicated Column1" = Table.DuplicateColumn(#"Duplicated Column", "Name", "ItemName"),
-    #"Added Custom1" = Table.AddColumn(#"Duplicated Column1", "IsLeaf", each false),
-    #"Added Custom2" = Table.AddColumn(#"Added Custom1", "ItemKind", each "Folder"),
-    #"Added Custom3" = Table.AddColumn(#"Added Custom2", "Data", each ISTAC.CubosNivel2Transformar([Count])),
-    #"Removed Columns1" = Table.RemoveColumns(#"Added Custom3",{"Count"}),
-    ToNavTable = Table.ToNavigationTable(  #"Removed Columns1", {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
-in
-  ToNavTable;
-
-ISTAC.CubosNivel2Transformar = (x as table) as table =>
-let 
-      #"Changed Type" = Table.TransformColumnTypes(x,{{"Resource", type text}}),
+      #"Changed Type" = Table.TransformColumnTypes(#"Removed Columns",{{"Resource", type text}}),
     #"Added Custom3" = Table.AddColumn(#"Changed Type", "Data", each ISTAC.Dataset("https://www3.gobiernodecanarias.org/istac/api/statistical-resources/v1.0/datasets/ISTAC/"&Text.From([Resource])&"/~latest")),
     RemoveAgency = Table.RemoveColumns(#"Added Custom3", {"Agency"} ),
     RenameColumns = Table.RenameColumns(RemoveAgency,{{"Resource", "Key"}, {"value", "Name"}}),
     AddItemKind = Table.AddColumn(RenameColumns, "ItemKind", each "Table"),
     AddIsLeaf = Table.AddColumn(AddItemKind, "IsLeaf", each true),
     AddItemName =  Table.DuplicateColumn(AddIsLeaf, "Name", "ItemName"),
-    ToNavTable =Table.ToNavigationTable(AddItemName, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf") 
+    ToNavTable = Table.ToNavigationTable(  AddItemName , {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
 in
-    ToNavTable;
+  ToNavTable;
 
 ISTAC.Dataset = (url as text) as table =>
 let
