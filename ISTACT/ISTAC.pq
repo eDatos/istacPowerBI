@@ -127,13 +127,17 @@ let
     #"Expanded representations" = Table.ExpandRecordColumn(Custom2, "representations", {"representation"}, {"representation"}),
     #"Added Custom" = Table.AddColumn(#"Expanded representations", "Custom", each Table.FromRecords([representation], null, MissingField.UseNull)),
     #"Removed Columns" = Table.RemoveColumns(#"Added Custom",{"representation"}),
-    Order = #"Removed Columns"[dimensionId],
-    Custom3 = Table.Transpose( #"Removed Columns" ),
+    Custom4 = CubeMetadata(Source),
+    #"Added Custom1" = Table.AddColumn(#"Removed Columns", "Custom.1", each MergeCubeMetadata([dimensionId],[Custom], Custom4)),
+    #"Removed Columns1" = Table.RemoveColumns(#"Added Custom1",{"Custom"}),
+    #"Renamed Columns2" = Table.RenameColumns(#"Removed Columns1",{{"Custom.1", "Custom"}}),
+    Order = #"Renamed Columns2"[dimensionId],
+    Custom3 = Table.Transpose( #"Renamed Columns2" ),
     #"Promoted Headers" = Table.PromoteHeaders(Custom3, [PromoteAllScalars=true]),
     TotalDimensions = List.Count( Order ),
     recursiveExpand = (x as table, y as number) => 
           let 
-	     OriginalColumnNames = {"code", "index"},
+	     OriginalColumnNames = {"code", "index","value"},
              ColumnToExpand = Order{y-1},
              NewColumnNames = List.Transform(OriginalColumnNames, each ColumnToExpand &"."& _),
              Calculation =  Table.ExpandTableColumn(x,ColumnToExpand, OriginalColumnNames , NewColumnNames),
@@ -144,30 +148,43 @@ let
       ColumnsToOrder = List.Transform( Order, each _ &".index"),
      ListOrder = List.Zip({ColumnsToOrder,List.Repeat({Order.Ascending}, List.Count(Order))}),
       #"Sorted Rows" = Table.Sort(Custom5,ListOrder),
-    Custom6 = List.Select( Table.ColumnNames( #"Sorted Rows"), each Text.EndsWith(_, ".code")),
-    Custom7 = Table.SelectColumns(#"Sorted Rows", Custom6),
-     Custom8 = List.Zip( {Custom6, List.Transform( Custom6, each Text.Replace(_, ".code",""))} ),
-    Custom9 = Custom7,
-    #"Renamed Columns" = Table.RenameColumns(Custom9,Custom8),
-    Custom10 = #"Renamed Columns",
-    Custom11 = Table.FromColumns( Table.ToColumns(Custom10) & {observation}, Order & {"Value"}),
-        #"Changed Type" = Table.TransformColumnTypes(Custom11, List.Zip( {Order, List.Repeat(  {type text}, List.Count(Order))}) ),
-    #"Changed Type1" = Table.TransformColumnTypes(#"Changed Type",{{"Value", type number}}),
+    Custom11 = Table.FromColumns( Table.ToColumns(#"Sorted Rows") & {observation}, Table.ColumnNames(#"Sorted Rows") & {"Value"}),
+        #"Changed Type1" = Table.TransformColumnTypes(Custom11,{{"Value", type number}}),
     #"Replaced Errors" = Table.ReplaceErrorValues(#"Changed Type1", {{"Value", null}}),
-        #"Pivoted Column" =  try  Table.Pivot(#"Replaced Errors", List.Distinct( #"Replaced Errors"[INDICADORES]), "INDICADORES", "Value")
-otherwise Table.Pivot(#"Replaced Errors", List.Distinct( #"Replaced Errors"[MEDIDAS]), "MEDIDAS", "Value"),
- metadata = Source[metadata],
-    measureCoverages = metadata[measureCoverages],
-    resource = measureCoverages[resource],
-    Custom1 = Table.FromRecords( resource ),
-    #"Expanded name" = Table.ExpandRecordColumn(Custom1, "name", {"text"}, {"name.text"}),
-    #"Expanded name.text" = Table.ExpandListColumn(#"Expanded name", "name.text"),
-    #"Expanded name.text1" = Table.ExpandRecordColumn(#"Expanded name.text", "name.text", {"value", "lang"}, {"value", "lang"}),
-    #"Removed Other Columns" = Table.SelectColumns(#"Expanded name.text1",{"id", "value"}),
-    ReplaceHeaders = List.Zip( Table.ToColumns( #"Removed Other Columns" ) ),
-    #"Renamed Columns1" = Table.RenameColumns(#"Pivoted Column",ReplaceHeaders)
+    Custom1 = List.Select( Table.ColumnNames( #"Replaced Errors" ), each Text.EndsWith(_, ".index")),
+    Custom6 = #"Replaced Errors",
+    #"Removed Columns2" = Table.RemoveColumns(Custom6,Custom1),
+    #"Removed Columns3" = Table.RemoveColumns(#"Removed Columns2",{"MEDIDAS.code"}),
+    #"Pivoted Column" = Table.Pivot(#"Removed Columns3", List.Distinct(#"Removed Columns3"[MEDIDAS.value]), "MEDIDAS.value", "Value")
 in
-   try #"Renamed Columns1" otherwise  #"Replaced Errors"  ;
+    try #"Pivoted Column" otherwise  #"Removed Columns2" ;
+
+MergeCubeMetadata = (x as text, dataTable as table, labelTable as table) as table =>
+let
+ FilteredTable = Table.SelectRows(labelTable, each [id]= x ),
+ JoinTable = Table.AddJoinColumn(dataTable, { "code" }, FilteredTable,{"id.1"}, "New"),
+ ExpandedColumn = Table.ExpandTableColumn( JoinTable, "New", Table.ColumnNames(FilteredTable)),
+ SelectColumns = Table.SelectColumns(ExpandedColumn, {"code","index", "value"})
+ in
+ SelectColumns;
+
+ CubeMetadata = (x as record) =>
+let
+
+    metadata = x[metadata],
+    dimensions = metadata[dimensions],
+    dimension = Table.FromRecords(dimensions[dimension] ),
+    #"Expanded name" = Table.ExpandRecordColumn(dimension, "name", {"text"}, {"text"}),
+    #"Expanded dimensionValues" = Table.ExpandRecordColumn(#"Expanded name", "dimensionValues", {"value"}, {"value"}),
+    #"Removed Columns" = Table.RemoveColumns(#"Expanded dimensionValues",{"text"}),
+    #"Expanded value" = Table.ExpandListColumn(#"Removed Columns", "value"),
+    #"Expanded value1" = Table.ExpandRecordColumn(#"Expanded value", "value", {"id", "name"}, {"id.1", "name"}),
+    #"Expanded name1" = Table.ExpandRecordColumn(#"Expanded value1", "name", {"text"}, {"text"}),
+    #"Expanded text" = Table.ExpandListColumn(#"Expanded name1", "text"),
+    #"Expanded text1" = Table.ExpandRecordColumn(#"Expanded text", "text", {"value", "lang"}, {"value", "lang"}),
+    FilterLanguage = Table.SelectRows( #"Expanded text1", each [lang] = "es")
+in
+    FilterLanguage;
 
 TransformBinary.Cubos = (url as text) as table =>
 let
