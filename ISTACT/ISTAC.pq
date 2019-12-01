@@ -107,7 +107,7 @@ ISTAC.Cubos = ()=>
     #"Grouped Rows" = Table.Group(#"Expanded Custom", {"Agency", "value", "lang", "Resource"}, {{"Count", each _, type table [id=text, urn=text, href=text, value=text, lang=text, kind=text, Agency=text, Resource=text, Version=text]}}),
     #"Removed Columns" = Table.RemoveColumns(#"Grouped Rows",{"Count", "lang"}),
       #"Changed Type" = Table.TransformColumnTypes(#"Removed Columns",{{"Resource", type text}}),
-    #"Added Custom3" = Table.AddColumn(#"Changed Type", "Data", each ISTAC.Dataset("https://www3.gobiernodecanarias.org/istac/api/statistical-resources/v1.0/datasets/ISTAC/"&Text.From([Resource])&"/~latest")),
+    #"Added Custom3" = Table.AddColumn(#"Changed Type", "Data", each ISTAC.Dataset("https://www3.gobiernodecanarias.org/istac/api/statistical-resources/v1.0/datasets/ISTAC/"&Text.From([Resource])&"/~latest.json")),
     RemoveAgency = Table.RemoveColumns(#"Added Custom3", {"Agency"} ),
     RenameColumns = Table.RenameColumns(RemoveAgency,{{"Resource", "Key"}, {"value", "Name"}}),
     AddItemKind = Table.AddColumn(RenameColumns, "ItemKind", each "Table"),
