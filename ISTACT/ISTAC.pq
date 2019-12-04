@@ -1,7 +1,6 @@
 ﻿[Version = "1.0.0"]
 section ISTAC;
-
-[DataSource.Kind="ISTAC", Publish="ISTAC.Publish"]
+ [DataSource.Kind="ISTAC",  Publish="ISTAC.Publish"]
 shared ISTAC.Contents =  Value.ReplaceType(Navigation, NavigationType);
 
 NavigationType = type function () as table meta [                  
@@ -105,7 +104,8 @@ ISTAC.Cubos = ()=>
     #"Added Custom" = Table.AddColumn(#"Expanded selfLink", "Custom", each Record.FromList( List.LastN( Text.Split([href], "/"),3), {"Agency","Resource","Version"})),
     #"Expanded Custom" = Table.ExpandRecordColumn(#"Added Custom", "Custom", {"Agency", "Resource", "Version"}, {"Agency", "Resource", "Version"}),
     #"Grouped Rows" = Table.Group(#"Expanded Custom", {"Agency", "value", "lang", "Resource"}, {{"Count", each _, type table [id=text, urn=text, href=text, value=text, lang=text, kind=text, Agency=text, Resource=text, Version=text]}}),
-    #"Removed Columns" = Table.RemoveColumns(#"Grouped Rows",{"Count", "lang"}),
+    RemoveDupeResources = Table.Distinct(#"Grouped Rows", {"Resource"}),
+    #"Removed Columns" = Table.RemoveColumns(RemoveDupeResources,{"Count", "lang"}),
       #"Changed Type" = Table.TransformColumnTypes(#"Removed Columns",{{"Resource", type text}}),
     #"Added Custom3" = Table.AddColumn(#"Changed Type", "Data", each ISTAC.Dataset("https://www3.gobiernodecanarias.org/istac/api/statistical-resources/v1.0/datasets/ISTAC/"&Text.From([Resource])&"/~latest.json")),
     RemoveAgency = Table.RemoveColumns(#"Added Custom3", {"Agency"} ),
@@ -116,6 +116,7 @@ ISTAC.Cubos = ()=>
     ToNavTable = Table.ToNavigationTable(  AddItemName , {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
 in
   ToNavTable;
+
 
 ISTAC.Dataset = (url as text) as table =>
 let
@@ -157,7 +158,7 @@ let
     #"Removed Columns3" = Table.RemoveColumns(#"Removed Columns2",{"MEDIDAS.code"}),
     #"Pivoted Column" = Table.Pivot(#"Removed Columns3", List.Distinct(#"Removed Columns3"[MEDIDAS.value]), "MEDIDAS.value", "Value")
 in
-    try #"Pivoted Column" otherwise  #"Removed Columns2" ;
+    #"Removed Columns2" ;
 
 MergeCubeMetadata = (x as text, dataTable as table, labelTable as table) as table =>
 let
@@ -186,46 +187,6 @@ let
 in
     FilterLanguage;
 
-TransformBinary.Cubos = (url as text) as table =>
-let
-    x = Binary.Buffer( Web.Contents(url , [Headers=[Accept="application/json"]]) ),
-    Source = Json.Document(x),
-    data = Source[data],
-    observation = Text.Split( data[observations], "|"),
-    Custom2 = Table.FromRecords(  data[dimensions]?[dimension]? ),
-    #"Expanded representations" = Table.ExpandRecordColumn(Custom2, "representations", {"representation"}, {"representation"}),
-    #"Added Custom" = Table.AddColumn(#"Expanded representations", "Custom", each Table.FromRecords([representation], null, MissingField.UseNull)),
-    #"Removed Columns" = Table.RemoveColumns(#"Added Custom",{"representation"}),
-    Order = #"Removed Columns"[dimensionId],
-    Custom3 = Table.Transpose( #"Removed Columns" ),
-    #"Promoted Headers" = Table.PromoteHeaders(Custom3, [PromoteAllScalars=true]),
-    TotalDimensions = List.Count( Order ),
-    recursiveExpand = (x as table, y as number) => 
-          let 
-	     OriginalColumnNames = {"code", "index"},
-             ColumnToExpand = Order{y-1},
-             NewColumnNames = List.Transform(OriginalColumnNames, each ColumnToExpand &"."& _),
-             Calculation =  Table.ExpandTableColumn(x,ColumnToExpand, OriginalColumnNames , NewColumnNames),
-	     Check = if y = TotalDimensions then Calculation else @recursiveExpand (Calculation, y +1)
- 	   in  
-	     Check,
-     Custom5= recursiveExpand (#"Promoted Headers" , 1),
-      ColumnsToOrder = List.Transform( Order, each _ &".index"),
-     ListOrder = List.Zip({ColumnsToOrder,List.Repeat({Order.Ascending}, List.Count(Order))}),
-      #"Sorted Rows" = Table.Sort(Custom5,ListOrder),
-    Custom6 = List.Select( Table.ColumnNames( #"Sorted Rows"), each Text.EndsWith(_, ".code")),
-    Custom7 = Table.SelectColumns(#"Sorted Rows", Custom6),
-     Custom8 = List.Zip( {Custom6, List.Transform( Custom6, each Text.Replace(_, ".code",""))} ),
-    Custom9 = Custom7,
-    #"Renamed Columns" = Table.RenameColumns(Custom9,Custom8),
-    Custom10 = #"Renamed Columns",
-    Custom11 = Table.FromColumns( Table.ToColumns(Custom10) & {observation}, Order & {"Value"}),
-        #"Changed Type" = Table.TransformColumnTypes(Custom11, List.Zip( {Order, List.Repeat(  {type text}, List.Count(Order))}) ),
-    #"Changed Type1" = Table.TransformColumnTypes(#"Changed Type",{{"Value", type number}}),
-    #"Replaced Errors" = Table.ReplaceErrorValues(#"Changed Type1", {{"Value", null}}),
-        #"Pivoted Column" = Table.Pivot(#"Replaced Errors", List.Distinct(#"Replaced Errors"[INDICADORES]), "INDICADORES", "Value")
-in
-#"Pivoted Column";
 
 TransformBinary.Indicadores= (url as text) as table =>
 let
