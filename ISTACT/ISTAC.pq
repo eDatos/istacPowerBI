@@ -20,7 +20,7 @@ NavigationType = type function () as table meta [
             {"Name",       "Key",        "Data",                           "ItemKind", "ItemName", "IsLeaf"},{
             {"Indicadores",      "indicators",  ISTAC.IndicatorNavTable() , "Folder",    "Indicator",    false},
             {"Cubos",      "Cubos",  ISTAC.SistemasEstadisticos (), "Folder",    "Cubos",    false},
-            {"Recursos Estructurales",      "Clasificaciones",  ISTAC.VariableFamilies() , "Folder",    "Clasificaciones",    false}
+            {"Clasificaciones",      "Clasificaciones",  ISTAC.VariableFamilies() , "Folder",    "Clasificaciones",    false}
             }),
         NavTable = Table.ToNavigationTable(objects, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf") 
     in
@@ -41,9 +41,7 @@ ISTAC.IndicatorNavTable = ()=>
 ISTAC.IndicadoresValoresAuxiliares = () =>
     let 
             objects = #table(  {"Name",       "Key",        "Data",                           "ItemKind", "ItemName", "IsLeaf"},{
-            {"Geográficos",      "Geográficos",  ISTAC.IndicatorGeographicGranularities() , "Table",    "Geográfico",    true},
-            {"Temas", "Temas", ISTAC.IndicatorSubjects(), "Table", "Temas", true},
-            {"Tiempo",      "Tiempo",  ISTAC.IndicatorTimeSeries(), "Table",    "Tiempo",    true}
+            {"Geográficos",      "Geográficos",  ISTAC.IndicatorGeographicGranularities() , "Table",    "Geográfico",    true}
             }),
               NavTable = Table.ToNavigationTable(objects, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf") 
               in 
@@ -74,7 +72,7 @@ in
 
 IndicatorSubTables = (x as table) => 
     let
-           #"Renamed Columns" = Table.RenameColumns(x,{{"id", "Key"}, {"code", "Name"}}),
+           #"Renamed Columns" = Table.RenameColumns(x,{{"id", "Key"}, {"title.__default__", "Name"}}),
     #"Added Custom" = Table.AddColumn(#"Renamed Columns", "ItemKind", each "Table"),
     #"Duplicated Column" = Table.DuplicateColumn(#"Added Custom", "Name", "ItemName"),
     #"Added Custom1" = Table.AddColumn(#"Duplicated Column", "IsLeaf", each true),
@@ -168,15 +166,16 @@ let
      ListOrder = List.Zip({ColumnsToOrder,List.Repeat({Order.Ascending}, List.Count(Order))}),
       #"Sorted Rows" = Table.Sort(Custom5,ListOrder),
     Custom11 = Table.FromColumns( Table.ToColumns(#"Sorted Rows") & {observation}, Table.ColumnNames(#"Sorted Rows") & {"Value"}),
-        #"Changed Type1" = Table.TransformColumnTypes(Custom11,{{"Value", type number}}),
+        #"Changed Type1" = Table.TransformColumnTypes(Custom11,{{"Value", type number}},  "en-US"),
     #"Replaced Errors" = Table.ReplaceErrorValues(#"Changed Type1", {{"Value", null}}),
     Custom1 = List.Select( Table.ColumnNames( #"Replaced Errors" ), each Text.EndsWith(_, ".index")),
     Custom6 = #"Replaced Errors",
     #"Removed Columns2" = Table.RemoveColumns(Custom6,Custom1),
-    #"Removed Columns3" = Table.RemoveColumns(#"Removed Columns2",{"MEDIDAS.code"}),
-    #"Pivoted Column" = Table.Pivot(#"Removed Columns3", List.Distinct(#"Removed Columns3"[MEDIDAS.value]), "MEDIDAS.value", "Value")
+    SetDateValue =  try Table.TransformColumnTypes(#"Removed Columns2", {{"TIME_PERIOD.value", type date}}, "en-US") otherwise #"Removed Columns2",
+    #"Removed Columns3" = Table.Buffer( Table.RemoveColumns(SetDateValue,{"MEDIDAS.code"} ) ),
+    #"Pivoted Column" = Table.Pivot(SetDateValue, List.Distinct(#"Removed Columns3"[MEDIDAS.value]), "MEDIDAS.value", "Value")
 in
-    try #"Pivoted Column" otherwise  #"Removed Columns2" ;
+    try #"Pivoted Column" otherwise  SetDateValue ;
 
 MergeCubeMetadata = (x as text, dataTable as table, labelTable as table) as table =>
 let
@@ -242,7 +241,7 @@ JSON = Json.Document(x),
     observation = JSON[observation],
     Custom11 = Table.FromColumns( Table.ToColumns(Custom10) & {observation}, Order & {"Value"}),
     #"Changed Type" = Table.TransformColumnTypes(Custom11, List.Zip( {Order, List.Repeat(  {type text}, List.Count(Order))}) ),
-    #"Changed Type1" = Table.TransformColumnTypes(#"Changed Type",{{"Value", type number}}),
+    #"Changed Type1" = Table.TransformColumnTypes(#"Changed Type",{{"Value", type number}}, "en-US"),
     #"Replaced Errors" = Table.ReplaceErrorValues(#"Changed Type1", {{"Value", null}}),
     #"Pivoted Column" = Table.Pivot(#"Replaced Errors", List.Distinct(#"Replaced Errors"[MEASURE]), "MEASURE", "Value")
 in
@@ -256,7 +255,7 @@ let
     #"Changed Type" = Table.TransformColumnTypes(#"Expanded title",{{"__default__", type text}, {"es", type text}, {"en", type text}, {"code", type text}}),
     #"Added Custom" = Table.AddColumn(#"Changed Type", "Value", each Table.FromRecords(  Json.Document(Web.Contents("https://www3.gobiernodecanarias.org/istac/api/indicators/v1.0/geographicalValues?geographicalGranularityCode="&[code]))[items], null, MissingField.UseNull)),
     #"Expanded Value" = Table.ExpandTableColumn(#"Added Custom", "Value", {"code", "title", "granularityCode", "latitude", "longitude"}, {"Value.code", "Value.title", "Value.granularityCode", "Value.latitude", "Value.longitude"}),
-    #"Changed Type1" = Table.TransformColumnTypes(#"Expanded Value",{{"Value.longitude", type number}, {"Value.latitude", type number}, {"Value.granularityCode", type text}, {"Value.code", type text}})
+    #"Changed Type1" = Table.TransformColumnTypes(#"Expanded Value",{{"Value.longitude", type number}, {"Value.latitude", type number}, {"Value.granularityCode", type text}, {"Value.code", type text}},  "en-US")
 in
     #"Changed Type1";
 
