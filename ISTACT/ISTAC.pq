@@ -1,6 +1,7 @@
 ﻿[Version = "1.0.0"]
 section ISTAC;
- [DataSource.Kind="ISTAC",  Publish="ISTAC.Publish"]
+
+[DataSource.Kind="ISTAC", Publish="ISTAC.Publish"]
 shared ISTAC.Contents =  Value.ReplaceType(Navigation, NavigationType);
 
 NavigationType = type function () as table meta [                  
@@ -18,7 +19,7 @@ NavigationType = type function () as table meta [
         objects = #table(
             {"Name",       "Key",        "Data",                           "ItemKind", "ItemName", "IsLeaf"},{
             {"Indicadores",      "indicators",  ISTAC.IndicatorNavTable() , "Folder",    "Indicator",    false},
-            {"Cubos",      "Cubos",  ISTAC.Cubos(), "Folder",    "Cubos",    false},
+            {"Cubos",      "Cubos",  ISTAC.SistemasEstadisticos (), "Folder",    "Cubos",    false},
             {"Recursos Estructurales",      "Clasificaciones",  ISTAC.VariableFamilies() , "Folder",    "Clasificaciones",    false}
             }),
         NavTable = Table.ToNavigationTable(objects, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf") 
@@ -93,10 +94,29 @@ each Record.Field([JsonFile], selector )),
 in
     Custom1;
 
-ISTAC.Cubos = ()=>
+ISTAC.SistemasEstadisticos = () =>
+    let
+    Source = ISTAC.AlternatePagination("https://www3.gobiernodecanarias.org/istac/api/operations/v1.0/operations?limit=1000", "operation"),
+    #"Expanded name" = Table.ExpandRecordColumn(Source, "name", {"text"}, {"name.text"}),
+    #"Expanded name.text" = Table.ExpandListColumn(#"Expanded name", "name.text"),
+    #"Expanded name.text1" = Table.ExpandRecordColumn(#"Expanded name.text", "name.text", {"value", "lang"}, {"name.text.value", "name.text.lang"}),
+    #"Filtered Rows" = Table.SelectRows(#"Expanded name.text1", each ([name.text.lang] = "es")),
+    #"Removed Columns" = Table.RemoveColumns(#"Filtered Rows",{"selfLink"}),
+    #"Added Custom" = Table.AddColumn(#"Removed Columns", "Data", each ISTAC.Cubos( "https://www3.gobiernodecanarias.org/istac/api/statistical-resources/v1.0/datasets?lang=es&limit=1000&query=STATISTICAL_OPERATION_URN EQ '" & Text.From([urn]) & "'")),
+    #"Removed Errors" = Table.RemoveRowsWithErrors(#"Added Custom", {"Data"}),
+    #"Removed Columns1" = Table.RemoveColumns(#"Removed Errors",{"urn", "name.text.lang", "kind"}),
+    #"Renamed Columns" = Table.RenameColumns(#"Removed Columns1",{{"id", "Key"}}),
+    #"Added Custom1" = Table.AddColumn(#"Renamed Columns", "Name", each "("&[Key]&") "&[name.text.value]),
+    #"Renamed Columns1" = Table.RenameColumns(#"Added Custom1",{{"name.text.value", "ItemName"}}),
+    #"Added Custom2" = Table.AddColumn(#"Renamed Columns1", "ItemKind", each "Folder"),
+    #"Added Custom3" = Table.AddColumn(#"Added Custom2", "IsLeaf", each false),
+ ToNavTable = Table.ToNavigationTable(   #"Added Custom3" , {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
+in
+  ToNavTable
+    ;
+ISTAC.Cubos = (url as text)=>
    let
-
-    Source = ISTAC.AlternatePagination("https://www3.gobiernodecanarias.org/istac/api/statistical-resources/v1.0/datasets?lang=es&limit=1000","dataset"),
+    Source = ISTAC.AlternatePagination(url,"dataset"),
     #"Expanded name" = Table.ExpandRecordColumn(Source, "name", {"text"}, {"text"}),
     #"Expanded text" = Table.ExpandListColumn(#"Expanded name", "text"),
     #"Expanded text1" = Table.ExpandRecordColumn(#"Expanded text", "text", {"value", "lang"}, {"value", "lang"}),
@@ -104,19 +124,17 @@ ISTAC.Cubos = ()=>
     #"Added Custom" = Table.AddColumn(#"Expanded selfLink", "Custom", each Record.FromList( List.LastN( Text.Split([href], "/"),3), {"Agency","Resource","Version"})),
     #"Expanded Custom" = Table.ExpandRecordColumn(#"Added Custom", "Custom", {"Agency", "Resource", "Version"}, {"Agency", "Resource", "Version"}),
     #"Grouped Rows" = Table.Group(#"Expanded Custom", {"Agency", "value", "lang", "Resource"}, {{"Count", each _, type table [id=text, urn=text, href=text, value=text, lang=text, kind=text, Agency=text, Resource=text, Version=text]}}),
-    RemoveDupeResources = Table.Distinct(#"Grouped Rows", {"Resource"}),
-    #"Removed Columns" = Table.RemoveColumns(RemoveDupeResources,{"Count", "lang"}),
+    #"Removed Columns" = Table.RemoveColumns(#"Grouped Rows",{"Count", "lang"}),
       #"Changed Type" = Table.TransformColumnTypes(#"Removed Columns",{{"Resource", type text}}),
     #"Added Custom3" = Table.AddColumn(#"Changed Type", "Data", each ISTAC.Dataset("https://www3.gobiernodecanarias.org/istac/api/statistical-resources/v1.0/datasets/ISTAC/"&Text.From([Resource])&"/~latest.json")),
     RemoveAgency = Table.RemoveColumns(#"Added Custom3", {"Agency"} ),
-    RenameColumns = Table.RenameColumns(RemoveAgency,{{"Resource", "Key"}, {"value", "Name"}}),
+    RenameColumns = Table.RenameColumns(RemoveAgency,{{"Resource", "Key"}, {"value", "ItemName"}}),
     AddItemKind = Table.AddColumn(RenameColumns, "ItemKind", each "Table"),
     AddIsLeaf = Table.AddColumn(AddItemKind, "IsLeaf", each true),
-    AddItemName =  Table.DuplicateColumn(AddIsLeaf, "Name", "ItemName"),
-    ToNavTable = Table.ToNavigationTable(  AddItemName , {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
+    AddName =  Table.AddColumn(AddIsLeaf, "Name", each "("& [Key]  &") "& [ItemName]),
+    ToNavTable = Table.ToNavigationTable(  AddName , {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
 in
   ToNavTable;
-
 
 ISTAC.Dataset = (url as text) as table =>
 let
@@ -158,7 +176,7 @@ let
     #"Removed Columns3" = Table.RemoveColumns(#"Removed Columns2",{"MEDIDAS.code"}),
     #"Pivoted Column" = Table.Pivot(#"Removed Columns3", List.Distinct(#"Removed Columns3"[MEDIDAS.value]), "MEDIDAS.value", "Value")
 in
-    #"Removed Columns2" ;
+    try #"Pivoted Column" otherwise  #"Removed Columns2" ;
 
 MergeCubeMetadata = (x as text, dataTable as table, labelTable as table) as table =>
 let
@@ -186,7 +204,6 @@ let
     FilterLanguage = Table.SelectRows( #"Expanded text1", each [lang] = "es")
 in
     FilterLanguage;
-
 
 TransformBinary.Indicadores= (url as text) as table =>
 let
