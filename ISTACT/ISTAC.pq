@@ -110,8 +110,9 @@ ISTAC.SistemasEstadisticos = () =>
     #"Added Custom3" = Table.AddColumn(#"Added Custom2", "IsLeaf", each false),
  ToNavTable = Table.ToNavigationTable(   #"Added Custom3" , {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
 in
-  ToNavTable
-    ;
+  ToNavTable;
+
+
 ISTAC.Cubos = (url as text)=>
    let
     Source = ISTAC.AlternatePagination(url,"dataset"),
@@ -170,12 +171,9 @@ let
     #"Replaced Errors" = Table.ReplaceErrorValues(#"Changed Type1", {{"Value", null}}),
     Custom1 = List.Select( Table.ColumnNames( #"Replaced Errors" ), each Text.EndsWith(_, ".index")),
     Custom6 = #"Replaced Errors",
-    #"Removed Columns2" = Table.RemoveColumns(Custom6,Custom1),
-    SetDateValue =  try Table.TransformColumnTypes(#"Removed Columns2", {{"TIME_PERIOD.value", type date}}, "en-US") otherwise #"Removed Columns2",
-    #"Removed Columns3" = Table.Buffer( Table.RemoveColumns(SetDateValue,{"MEDIDAS.code"} ) ),
-    #"Pivoted Column" = Table.Pivot(SetDateValue, List.Distinct(#"Removed Columns3"[MEDIDAS.value]), "MEDIDAS.value", "Value")
+    #"Removed Columns2" = Table.RemoveColumns(Custom6,Custom1)
 in
-    try #"Pivoted Column" otherwise  SetDateValue ;
+    #"Removed Columns2"  ;
 
 MergeCubeMetadata = (x as text, dataTable as table, labelTable as table) as table =>
 let
@@ -242,10 +240,9 @@ JSON = Json.Document(x),
     Custom11 = Table.FromColumns( Table.ToColumns(Custom10) & {observation}, Order & {"Value"}),
     #"Changed Type" = Table.TransformColumnTypes(Custom11, List.Zip( {Order, List.Repeat(  {type text}, List.Count(Order))}) ),
     #"Changed Type1" = Table.TransformColumnTypes(#"Changed Type",{{"Value", type number}}, "en-US"),
-    #"Replaced Errors" = Table.ReplaceErrorValues(#"Changed Type1", {{"Value", null}}),
-    #"Pivoted Column" = Table.Pivot(#"Replaced Errors", List.Distinct(#"Replaced Errors"[MEASURE]), "MEASURE", "Value")
+    #"Replaced Errors" = Table.ReplaceErrorValues(#"Changed Type1", {{"Value", null}})
 in
-    #"Pivoted Column";
+    #"Replaced Errors" ;
 
 ISTAC.IndicatorGeographicGranularities= () as table =>
 let
@@ -324,37 +321,55 @@ in
 
 ISTAC.VariableFamilies = () as table =>
   let
-    Source = ISTAC.AlternatePagination("https://www3.gobiernodecanarias.org/istac/api/structural-resources/v1.0/variablefamilies?limit=25", "variableFamily"),
+   Source = ISTAC.AlternatePagination("https://www3.gobiernodecanarias.org/istac/api/structural-resources/v1.0/variablefamilies?limit=25", "variableFamily"),
     #"Expanded selfLink" = Table.ExpandRecordColumn(Source, "selfLink", {"kind", "href"}, {"kind.1", "href"}),
     #"Expanded name" = Table.ExpandRecordColumn(#"Expanded selfLink", "name", {"text"}, {"text"}),
     #"Expanded text" = Table.ExpandListColumn(#"Expanded name", "text"),
     #"Expanded text1" = Table.ExpandRecordColumn(#"Expanded text", "text", {"value", "lang"}, {"value", "lang"}),
     #"Filtered Rows" = Table.SelectRows(#"Expanded text1", each [lang] = "es"),
-    #"Added Custom" = Table.AddColumn(#"Filtered Rows", "Custom", each ISTAC.AlternatePagination( [href]&"/variables?limit=2", "variable")),
+    #"Added Custom" = Table.AddColumn(#"Filtered Rows", "Custom", each ISTAC.AlternatePagination([href]&"/variables?limit=2", "variable")),
     #"Renamed Columns" = Table.RenameColumns(#"Added Custom",{{"id", "Key"}, {"value", "Name"}}),
     #"Duplicated Column" = Table.DuplicateColumn(#"Renamed Columns", "Name", "ItemName"),
     #"Added Custom1" = Table.AddColumn(#"Duplicated Column", "IsLeaf", each false),
     #"Added Custom2" = Table.AddColumn(#"Added Custom1", "ItemKind", each "Folder"),
     #"Removed Other Columns" = Table.SelectColumns(#"Added Custom2",{"IsLeaf", "ItemKind", "ItemName", "Custom", "Name", "Key"}),
-    #"Added Custom3" = Table.AddColumn(#"Removed Other Columns", "Data", each ISTAC.VariableFamilies2ndLevel([Custom])),
+    #"Added Custom3" = Table.AddColumn(#"Removed Other Columns", "Data", each ISTAC.VariableFamiliesLevel2 ([Custom])),
     #"Removed Columns" = Table.RemoveColumns(#"Added Custom3",{"Custom"}),
      ToNavTable = Table.ToNavigationTable( #"Removed Columns", {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
 in
 ToNavTable;
 
-ISTAC.VariableFamilies2ndLevel = (x as table) => 
+ISTAC.VariableFamiliesLevel2 = (x as table) => 
 let
-    #"Expanded name" = Table.ExpandRecordColumn(x, "name", {"text"}, {"text"}),
+   #"Expanded name" = Table.ExpandRecordColumn(x, "name", {"text"}, {"text"}),
     #"Expanded text" = Table.ExpandListColumn(#"Expanded name", "text"),
     #"Expanded text1" = Table.ExpandRecordColumn(#"Expanded text", "text", {"value", "lang"}, {"value", "lang"}),
     #"Expanded selfLink" = Table.ExpandRecordColumn(#"Expanded text1", "selfLink", {"kind", "href"}, {"kind.1", "href"}),
-    #"Added Custom" = Table.AddColumn(#"Expanded selfLink", "Data", each ISTAC.AlternatePagination([href]&"/variableelements", "variableElement") ),
-    #"Removed Other Columns" = Table.SelectColumns( #"Added Custom" ,{"id", "Data", "value"}),
-    #"Renamed Columns" = Table.RenameColumns(#"Removed Other Columns",{{"value", "Name"}, {"id", "Key"}}),
+    #"Renamed Columns" = Table.RenameColumns(#"Expanded selfLink",{{"value", "Name"}, {"id", "Key"}}),
+    #"Duplicated Column" = Table.DuplicateColumn(#"Renamed Columns", "Name", "ItemName"),
+    #"Added Custom1" = Table.AddColumn(#"Duplicated Column", "IsLeaf", each false),
+    AddItemKind = Table.AddColumn( #"Added Custom1", "ItemKind", each "Folder"),
+    #"Added Custom" = Table.AddColumn(AddItemKind, "Custom", each ISTAC.AlternatePagination("https://www3.gobiernodecanarias.org/istac/api/structural-resources/v1.0/codelists?query=VARIABLE_URN%20EQ%20%22urn%3Asiemac%3Aorg.siemac.metamac.infomodel.structuralresources.Variable%3D" & [Key] & "%22 ", "codelist")),
+    #"Added Custom2" = Table.AddColumn(#"Added Custom", "Data", each ISTAC.VariableFamiliesLevel3([Custom])),
+    #"Removed Other Columns" = Table.SelectColumns(#"Added Custom2",{"Key", "Name", "ItemName", "IsLeaf", "ItemKind", "Data"}),
+     ToNavTable = Table.ToNavigationTable(  #"Removed Other Columns", {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
+in
+ToNavTable;
+
+ISTAC.VariableFamiliesLevel3 = (x as table) =>
+   let
+    #"Expanded name" = Table.ExpandRecordColumn(x, "name", {"text"}, {"text"}),
+    #"Expanded text" = Table.ExpandListColumn(#"Expanded name", "text"),
+    #"Expanded text1" = Table.ExpandRecordColumn(#"Expanded text", "text", {"value", "lang"}, {"value", "lang"}),
+    #"Filtered Rows" = Table.SelectRows(#"Expanded text1", each ([lang] = "es")),
+    #"Expanded selfLink" = Table.ExpandRecordColumn(#"Filtered Rows", "selfLink", {"kind", "href"}, {"kind.1", "href"}),
+    #"Added Custom" = Table.AddColumn(#"Expanded selfLink", "Data", each ISTAC.AlternatePagination([href] &"/codes.json?fields=+variableElement", "code"  )),
+    #"Removed Other Columns" = Table.SelectColumns(#"Added Custom",{"urn", "value", "Data"}),
+    #"Renamed Columns" = Table.RenameColumns(#"Removed Other Columns",{{"value", "Name"}, {"urn", "Key"}}),
     #"Duplicated Column" = Table.DuplicateColumn(#"Renamed Columns", "Name", "ItemName"),
     #"Added Custom1" = Table.AddColumn(#"Duplicated Column", "IsLeaf", each true),
     AddItemKind = Table.AddColumn( #"Added Custom1", "ItemKind", each "Table"),
-     ToNavTable = Table.ToNavigationTable( AddItemKind, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
+    ToNavTable = Table.ToNavigationTable( AddItemKind, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
 in
 ToNavTable;
 
