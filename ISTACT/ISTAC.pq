@@ -139,68 +139,70 @@ ISTAC.Dataset = (url as text) as table =>
 let
   x = Binary.Buffer( Web.Contents(url , [Headers=[Accept="application/json"]]) ),
     Source = Json.Document(x),
-    data = Source[data],
-    observation = Text.Split( data[observations], "|"),
-    Custom2 = Table.FromRecords(  data[dimensions]?[dimension]? ),
-    #"Expanded representations" = Table.ExpandRecordColumn(Custom2, "representations", {"representation"}, {"representation"}),
-    #"Added Custom" = Table.AddColumn(#"Expanded representations", "Custom", each Table.FromRecords([representation], null, MissingField.UseNull)),
-    #"Removed Columns" = Table.RemoveColumns(#"Added Custom",{"representation"}),
-    Custom4 = CubeMetadata(Source),
-    #"Added Custom1" = Table.AddColumn(#"Removed Columns", "Custom.1", each MergeCubeMetadata([dimensionId],[Custom], Custom4)),
-    #"Removed Columns1" = Table.RemoveColumns(#"Added Custom1",{"Custom"}),
-    #"Renamed Columns2" = Table.RenameColumns(#"Removed Columns1",{{"Custom.1", "Custom"}}),
-    Order = #"Renamed Columns2"[dimensionId],
-    Custom3 = Table.Transpose( #"Renamed Columns2" ),
-    #"Promoted Headers" = Table.PromoteHeaders(Custom3, [PromoteAllScalars=true]),
-    TotalDimensions = List.Count( Order ),
-    recursiveExpand = (x as table, y as number) => 
-          let 
-	     OriginalColumnNames = {"code", "index","value"},
-             ColumnToExpand = Order{y-1},
-             NewColumnNames = List.Transform(OriginalColumnNames, each ColumnToExpand &"."& _),
-             Calculation =  Table.ExpandTableColumn(x,ColumnToExpand, OriginalColumnNames , NewColumnNames),
-	     Check = if y = TotalDimensions then Calculation else @recursiveExpand (Calculation, y +1)
- 	   in  
-	     Check,
-     Custom5= recursiveExpand (#"Promoted Headers" , 1),
-      ColumnsToOrder = List.Transform( Order, each _ &".index"),
-     ListOrder = List.Zip({ColumnsToOrder,List.Repeat({Order.Ascending}, List.Count(Order))}),
-      #"Sorted Rows" = Table.Sort(Custom5,ListOrder),
-    Custom11 = Table.FromColumns( Table.ToColumns(#"Sorted Rows") & {observation}, Table.ColumnNames(#"Sorted Rows") & {"Value"}),
-        #"Changed Type1" = Table.TransformColumnTypes(Custom11,{{"Value", type number}},  "en-US"),
-    #"Replaced Errors" = Table.ReplaceErrorValues(#"Changed Type1", {{"Value", null}}),
-    Custom1 = List.Select( Table.ColumnNames( #"Replaced Errors" ), each Text.EndsWith(_, ".index")),
-    Custom6 = #"Replaced Errors",
-    #"Removed Columns2" = Table.RemoveColumns(Custom6,Custom1)
+      Metadata = CubeMetadata( Source),
+    ValuesColumn = CubeValuesAsTable(Source),
+    DimensionColumns = CubeDimensions(Source, Metadata),
+    #"Merged Queries" = Table.NestedJoin(DimensionColumns, {"Index"}, ValuesColumn, {"Index"}, "ValuesAsTable", JoinKind.LeftOuter),
+    #"Removed Columns" = Table.RemoveColumns(#"Merged Queries",{"Index"}),
+    #"Expanded ValuesAsTable" = Table.ExpandTableColumn(#"Removed Columns", "ValuesAsTable", {"Values"}, {"Values"}),
+    #"Changed Type" = Table.TransformColumnTypes(#"Expanded ValuesAsTable",{{"Values", type number}}, "en-us")
 in
-    #"Removed Columns2"  ;
+    #"Changed Type";
 
-MergeCubeMetadata = (x as text, dataTable as table, labelTable as table) as table =>
+CubeValuesAsTable = (x as record) as table =>
 let
- FilteredTable = Table.SelectRows(labelTable, each [id]= x ),
- JoinTable = Table.AddJoinColumn(dataTable, { "code" }, FilteredTable,{"id.1"}, "New"),
- ExpandedColumn = Table.ExpandTableColumn( JoinTable, "New", Table.ColumnNames(FilteredTable)),
- SelectColumns = Table.SelectColumns(ExpandedColumn, {"code","index", "value"})
- in
- SelectColumns;
+    ValuesList = x[data],
+    Values= Text.Split( ValuesList [observations], "|"), 
+    Source = Table.FromList( Values, Splitter.SplitByNothing()),
+    Custom1 = Table.AddIndexColumn(  Source, "Index", 0),
+    #"Renamed Columns" = Table.RenameColumns(Custom1,{{"Column1", "Values"}})
+in
+    #"Renamed Columns";
 
- CubeMetadata = (x as record) =>
+ CubeMetadata = (x as record) as table => 
 let
-
     metadata = x[metadata],
     dimensions = metadata[dimensions],
-    dimension = Table.FromRecords(dimensions[dimension] ),
-    #"Expanded name" = Table.ExpandRecordColumn(dimension, "name", {"text"}, {"text"}),
-    #"Expanded dimensionValues" = Table.ExpandRecordColumn(#"Expanded name", "dimensionValues", {"value"}, {"value"}),
-    #"Removed Columns" = Table.RemoveColumns(#"Expanded dimensionValues",{"text"}),
-    #"Expanded value" = Table.ExpandListColumn(#"Removed Columns", "value"),
-    #"Expanded value1" = Table.ExpandRecordColumn(#"Expanded value", "value", {"id", "name"}, {"id.1", "name"}),
-    #"Expanded name1" = Table.ExpandRecordColumn(#"Expanded value1", "name", {"text"}, {"text"}),
-    #"Expanded text" = Table.ExpandListColumn(#"Expanded name1", "text"),
+    dimension = dimensions[dimension],
+    Custom1 = Table.FromRecords( dimension ),
+    #"Expanded dimensionValues" = Table.ExpandRecordColumn(Custom1, "dimensionValues", {"value"}, {"value"}),
+    #"Expanded value" = Table.ExpandListColumn(#"Expanded dimensionValues", "value"),
+    #"Removed Columns" = Table.RemoveColumns(#"Expanded value",{"name"}),
+    #"Expanded value1" = Table.ExpandRecordColumn(#"Removed Columns", "value", {"id", "name"}, {"id.1", "name"}),
+    #"Expanded name" = Table.ExpandRecordColumn(#"Expanded value1", "name", {"text"}, {"text"}),
+    #"Expanded text" = Table.ExpandListColumn(#"Expanded name", "text"),
     #"Expanded text1" = Table.ExpandRecordColumn(#"Expanded text", "text", {"value", "lang"}, {"value", "lang"}),
-    FilterLanguage = Table.SelectRows( #"Expanded text1", each [lang] = "es")
+    #"Filtered Rows" = Table.SelectRows(#"Expanded text1", each ([lang] = "es")),
+    #"Removed Columns1" = Table.RemoveColumns(#"Filtered Rows",{"lang"}),
+    Custom2 = Table.Buffer( #"Removed Columns1" ),
+    #"Renamed Columns" = Table.RenameColumns(Custom2,{{"id.1", "code"}})
 in
-    FilterLanguage;
+    #"Renamed Columns";
+
+CubeDimensions = (x as record, y as table) as table =>
+let
+    Source = x[data],
+    dimensions = Source[dimensions],
+    dimension = Table.FromRecords( dimensions[dimension]),
+    #"Expanded representations" = Table.ExpandRecordColumn(dimension, "representations", {"representation"}, {"representations.representation"}),
+    Custom1 = Table.TransformColumns( #"Expanded representations", {{"representations.representation", Table.FromRecords }}),
+    #"Transposed Table" = Table.Transpose(Custom1),
+    #"Promoted Headers" = Table.PromoteHeaders(#"Transposed Table", [PromoteAllScalars=true]),
+    #"Expanded TERRITORIO" = List.Accumulate( dimension[dimensionId] , 
+ #"Promoted Headers",
+(state, column) => Table.ExpandTableColumn(state, column, {"code", "index"}, List.Transform({"code", "index"}, each Text.Combine({column,".", _ } ) )   )),
+    Custom2 = List.Accumulate( dimension[dimensionId], 
+ #"Expanded TERRITORIO",
+(state, column) => Table.NestedJoin(state, {column&".code"}, Table.SelectRows( y, each [id]= column), {"code"}, column&".value" )),
+    Custom3 = List.Accumulate( dimension[dimensionId] , 
+ Custom2,
+(state, column) => Table.ExpandTableColumn(state, column&".value", {"value"}, {column&".label"}   )),
+    Order = List.Zip({List.Transform(dimension[dimensionId], each _&".index"),  List.Repeat( {Order.Ascending }, List.Count(dimension[dimensionId]))}),
+    Output = Table.Sort(Custom3, Order),
+    #"Added Index" = Table.AddIndexColumn(Output, "Index", 0, 1),
+    Custom4 = Table.RemoveColumns( #"Added Index", List.Transform(dimension[dimensionId], each _&".index" ))
+in
+    Custom4;
 
 TransformBinary.Indicadores= (url as text) as table =>
 let
@@ -215,18 +217,9 @@ JSON = Json.Document(x),
     #"Removed Columns" = Table.RemoveColumns(#"Added Custom1",{"index"}),
     #"Transposed Table" = Table.Transpose(#"Removed Columns"),
     #"Promoted Headers" = Table.PromoteHeaders(#"Transposed Table", [PromoteAllScalars=true]),
-    Custom4 = #"Promoted Headers",
-    TotalDimensions = List.Count( Order ),
-    recursiveExpand = (x as table, y as number) => 
-          let 
-	     OriginalColumnNames = {"Name", "Value"},
-             ColumnToExpand = Order{y-1},
-             NewColumnNames = List.Transform(OriginalColumnNames, each ColumnToExpand &"."& _),
-             Calculation =  Table.ExpandTableColumn(x,ColumnToExpand, OriginalColumnNames , NewColumnNames),
-	     Check = if y = TotalDimensions then Calculation else @recursiveExpand (Calculation, y +1)
- 	   in  
-	     Check,
-     Custom5= recursiveExpand (Custom4, 1),
+     Custom5= List.Accumulate( Order, 
+#"Promoted Headers",
+(state, column) => Table.ExpandTableColumn(state, column, {"code", "index"}, List.Transform({"code", "index"}, each Text.Combine({column,".", _ } ) )   )),
      ColumnsToOrder = List.Transform( Order, each _ &".Value"),
      ListOrder = List.Zip({ColumnsToOrder,List.Repeat({Order.Ascending}, List.Count(Order))}),
     #"Sorted Rows" = Table.Sort(Custom5,ListOrder),
