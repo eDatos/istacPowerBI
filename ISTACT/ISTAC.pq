@@ -60,11 +60,13 @@ ISTAC.Indicadores = () as table =>
     #"Duplicated Column" = Table.DuplicateColumn(#"Added Custom1", "Name", "ItemName"),
     #"Added Custom2" = Table.AddColumn(#"Duplicated Column", "IsLeaf", each false),
     #"Renamed Columns1" = Table.RenameColumns(#"Added Custom2",{{"Custom", "Data"}}),
-    #"Reordered Columns" = Table.ReorderColumns(#"Renamed Columns1",{"Key", "Name", "ItemKind", "Data", "ItemName", "IsLeaf"}),
+    #"Reordered Columns" = Table.ReorderColumns(#"Renamed Columns1",{"Name", "Key", "Data", "ItemKind", "ItemName", "IsLeaf"}),
     AddSubNavTable = Table.AddColumn(#"Reordered Columns", "NewColumn", each  IndicatorSubTables ([Data] )),
     RemoveOldDataColumn = Table.RemoveColumns( AddSubNavTable, {"Data"}),
     ChangeName = Table.RenameColumns( RemoveOldDataColumn, {"NewColumn", "Data"}),
-    ToNavTable = Table.ToNavigationTable( ChangeName, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
+    #"Removed Other Columns" = Table.SelectColumns(ChangeName,{"Name", "Key", "Data", "ItemKind", "ItemName", "IsLeaf"}),
+    TableType =  Value.ReplaceType(#"Removed Other Columns",  type table [Name= text, Key = text, Data= table, ItemKind = text, ItemName= text, IsLeaf = logical]) ,
+    ToNavTable = Table.ToNavigationTable( TableType, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
 in
      ToNavTable ;
 
@@ -74,7 +76,7 @@ IndicatorSubTables = (x as table) =>
     #"Added Custom" = Table.AddColumn(#"Renamed Columns", "ItemKind", each "Table"),
     #"Duplicated Column" = Table.DuplicateColumn(#"Added Custom", "Name", "ItemName"),
     #"Added Custom1" = Table.AddColumn(#"Duplicated Column", "IsLeaf", each true),
-    #"Removed Other Columns" = Table.SelectColumns(#"Added Custom1",{"Key", "Name", "Data", "ItemKind", "ItemName", "IsLeaf"}),
+    #"Removed Other Columns" = Table.SelectColumns(#"Added Custom1",{"Name", "Key", "Data", "ItemKind", "ItemName", "IsLeaf"}),
     ToNavTable = Table.ToNavigationTable( #"Removed Other Columns", {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
     in 
         ToNavTable;
@@ -106,7 +108,8 @@ ISTAC.SistemasEstadisticos = () =>
     #"Renamed Columns1" = Table.RenameColumns(#"Added Custom1",{{"name.text.value", "ItemName"}}),
     #"Added Custom2" = Table.AddColumn(#"Renamed Columns1", "ItemKind", each "Folder"),
     #"Added Custom3" = Table.AddColumn(#"Added Custom2", "IsLeaf", each false),
- ToNavTable = Table.ToNavigationTable(   #"Added Custom3" , {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
+    ReorderColumns= Table.ReorderColumns(#"Added Custom3",{"Name", "Key", "Data", "ItemKind", "ItemName", "IsLeaf"}),
+ ToNavTable = Table.ToNavigationTable(ReorderColumns , {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
 in
   ToNavTable;
 
@@ -129,7 +132,8 @@ ISTAC.Cubos = (url as text)=>
     AddItemKind = Table.AddColumn(RenameColumns, "ItemKind", each "Table"),
     AddIsLeaf = Table.AddColumn(AddItemKind, "IsLeaf", each true),
     AddName =  Table.AddColumn(AddIsLeaf, "Name", each "("& [Key]  &") "& [ItemName]),
-    ToNavTable = Table.ToNavigationTable(  AddName , {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
+        ReorderColumns= Table.ReorderColumns(AddName,{"Name", "Key", "Data", "ItemKind", "ItemName", "IsLeaf"}),
+    ToNavTable = Table.ToNavigationTable(  ReorderColumns , {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
 in
   ToNavTable;
 
@@ -270,7 +274,7 @@ in
 
 ISTAC.SystemIndicators = () =>
     let
-    Source = ISTAC.SystemIndicatorPagination("https://www.gobiernodecanarias.org/istac/api/indicators/v1.0/indicatorsSystems", 1000),
+    Source = ISTAC.SystemIndicatorPagination("  ", 1000),
     #"Added Custom" = Table.AddColumn(Source, "Custom", each ISTAC.SystemIndicatorPagination([selfLink]&"/indicatorsInstances", 1000)),
     #"Expanded title" = Table.ExpandRecordColumn(#"Added Custom", "title", {"__default__"}, {"title.__default__"}),
     #"Renamed Columns" = Table.RenameColumns(#"Expanded title",{{"id", "Key"}, {"title.__default__", "Name"}}),
@@ -282,7 +286,7 @@ ISTAC.SystemIndicators = () =>
     #"Removed Columns" = Table.RemoveColumns(#"Added Custom3",{"Custom"}),
     #"Added Custom4" = Table.AddColumn(#"Removed Columns", "Data", each ISTAC.SystemIndicatorSubLevel([Custom.1])),
     #"Removed Columns1" = Table.RemoveColumns(#"Added Custom4",{"Custom.1"}),
-    ReorderColumns= Table.ReorderColumns(#"Removed Columns1",{"Key", "Name", "ItemKind", "Data", "ItemName", "IsLeaf"}),
+    ReorderColumns= Table.ReorderColumns(#"Removed Columns1",{"Name", "Key", "Data", "ItemKind", "ItemName", "IsLeaf"}),
     ToNavTable = Table.ToNavigationTable( ReorderColumns , {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
 in
     ToNavTable ;
@@ -295,7 +299,7 @@ let
     #"Added Custom4" = Table.AddColumn(#"Duplicated Column1", "IsLeaf", each true),
     #"Added Custom5" = Table.AddColumn(#"Added Custom4", "ItemKind", each "Table"),
     #"Removed Other Columns1" = Table.SelectColumns(#"Added Custom5",{"Key", "Name", "ItemName", "IsLeaf", "Data", "ItemKind"}),
-     ReorderColumns= Table.ReorderColumns(#"Removed Other Columns1",{"Key", "Name", "ItemKind", "Data", "ItemName", "IsLeaf"}),
+     ReorderColumns=  Table.ReorderColumns(#"Removed Other Columns1",{"Name", "Key", "Data", "ItemKind", "ItemName", "IsLeaf"}),
       ToNavTable = Table.ToNavigationTable( ReorderColumns, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
 in
 ToNavTable;
@@ -334,7 +338,8 @@ ISTAC.VariableFamilies = () as table =>
     #"Added Custom3" = Table.AddColumn(#"Removed Other Columns", "Data", each ISTAC.VariableFamiliesLevel2 ([Custom])),
     #"Removed Columns" = Table.RemoveColumns(#"Added Custom3",{"Custom"}),
        RemoveLabels = Table.ReplaceValue( #"Removed Columns" ,"Familia de Variables ","",Replacer.ReplaceText,{"Name"}),
-     ToNavTable = Table.ToNavigationTable( RemoveLabels, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
+       TableOrder = Table.ReorderColumns(RemoveLabels,{"Name", "Key", "Data", "ItemKind", "ItemName", "IsLeaf"}),
+     ToNavTable = Table.ToNavigationTable( TableOrder, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
 in
 try ToNavTable otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error");
 
@@ -352,7 +357,8 @@ let
     #"Added Custom2" = Table.AddColumn(#"Added Custom", "Data", each ISTAC.VariableFamiliesLevel3([Custom])),
     #"Removed Other Columns" = Table.SelectColumns(#"Added Custom2",{"Key", "Name", "ItemName", "IsLeaf", "ItemKind", "Data"}),
    RemoveLabels = Table.ReplaceValue(  #"Removed Other Columns" ,"Variable ","",Replacer.ReplaceText,{"Name"}),
-     ToNavTable = Table.ToNavigationTable(  RemoveLabels , {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
+    TableOrder = Table.ReorderColumns(RemoveLabels,{"Name", "Key", "Data", "ItemKind", "ItemName", "IsLeaf"}),
+     ToNavTable = Table.ToNavigationTable(  TableOrder , {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
 in
 try ToNavTable otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error");
 
@@ -369,7 +375,8 @@ ISTAC.VariableFamiliesLevel3 = (x as table) =>
     #"Duplicated Column" = Table.DuplicateColumn(#"Renamed Columns", "Name", "ItemName"),
     #"Added Custom1" = Table.AddColumn(#"Duplicated Column", "IsLeaf", each true),
     AddItemKind = Table.AddColumn( #"Added Custom1", "ItemKind", each "Table"),
-    ToNavTable = Table.ToNavigationTable( AddItemKind, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
+    TableOrder = Table.ReorderColumns(AddItemKind,{"Name", "Key", "Data", "ItemKind", "ItemName", "IsLeaf"}),
+    ToNavTable = Table.ToNavigationTable( TableOrder, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
 in
 try ToNavTable otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error") ;
 
@@ -418,13 +425,13 @@ Table.ToNavigationTable = (
     isLeafColumn as text
 ) as table =>
     let
-        tableType = Value.Type(table),
-        newTableType = (try Type.AddTableKey(tableType, keyColumns, true) otherwise tableType )  meta 
+        tableType = Value.Type( Value.ReplaceType(table,  type table [Name= text, Key = text, Data= table, ItemKind = text, ItemName= text, IsLeaf = logical]) ),
+        newTableType = (try Type.AddTableKey(tableType, keyColumns, true) otherwise  tableType )  meta 
         [
             NavigationTable.NameColumn = nameColumn, 
             NavigationTable.DataColumn = dataColumn,
             NavigationTable.ItemKindColumn = itemKindColumn, 
-            Preview.DelayColumn = dataColumn, 
+            Preview.DelayColumn = itemNameColumn, 
             NavigationTable.IsLeafColumn = isLeafColumn
         ],
         navigationTable = Value.ReplaceType(table, newTableType)
