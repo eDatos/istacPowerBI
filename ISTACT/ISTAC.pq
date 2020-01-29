@@ -49,10 +49,8 @@ ISTAC.IndicadoresValoresAuxiliares = () =>
 
 ISTAC.Indicadores = () as table =>
  let
-    Source = Json.Document(Web.Contents("https://www3.gobiernodecanarias.org/istac/api/indicators/v1.0/indicators?limit=1000")),
-    items = Source[items],
-    Custom1 = Table.FromRecords( items, null, MissingField.UseNull ),
-    #"Expanded title" = Table.ExpandRecordColumn(Custom1, "title", {"es", "en", "__default__"}, {"title.es", "title.en", "title.__default__"}),
+     Source = ISTAC.AlternatePagination("https://www3.gobiernodecanarias.org/istac/api/indicators/v1.0/indicators?limit=1000", "items"),
+    #"Expanded title" = Table.ExpandRecordColumn(Source, "title", {"es", "en", "__default__"}, {"title.es", "title.en", "title.__default__"}),
     #"Expanded subjectTitle" = Table.ExpandRecordColumn(#"Expanded title", "subjectTitle", {"es", "__default__"}, {"subjectTitle.es", "subjectTitle.__default__"}),
     #"Grouped Rows" = Table.Group(#"Expanded subjectTitle", {"subjectTitle.es", "subjectCode"}, {{"Data", each _, Value.Type(#"Expanded subjectTitle")  }}),
     #"Renamed Columns" = Table.RenameColumns(#"Grouped Rows",{{"subjectTitle.es", "Name"}, {"subjectCode", "Key"}}),
@@ -208,9 +206,8 @@ TransformBinary.Indicadores= (url as text) as table =>
 let
 x= Binary.Buffer( Web.Contents(url & "/data", [Headers=[Accept="application/json"]]) ),
 JSON = Json.Document(x),
-    Custom2 = JSON,
-    Order = Custom2[format],
-    Custom3 = Record.ToTable( Custom2[dimension] ),
+    Order = JSON[format],
+    Custom3 = Record.ToTable( JSON[dimension] ),
     #"Expanded Value" = Table.ExpandRecordColumn(Custom3, "Value", {"representation"}, {"representation"}),
     #"Expanded representation" = Table.ExpandRecordColumn(#"Expanded Value", "representation", {"index"}, {"index"}),
     #"Added Custom1" = Table.AddColumn(#"Expanded representation", "MyTable", each Record.ToTable([index])),
@@ -219,7 +216,7 @@ JSON = Json.Document(x),
     #"Promoted Headers" = Table.PromoteHeaders(#"Transposed Table", [PromoteAllScalars=true]),
      Custom5= List.Accumulate( Order, 
 #"Promoted Headers",
-(state, column) => Table.ExpandTableColumn(state, column, {"code", "index"}, List.Transform({"code", "index"}, each Text.Combine({column,".", _ } ) )   )),
+(state, column) => Table.ExpandTableColumn(state, column, {"Name", "Value"}, List.Transform({"Name", "Value"}, each Text.Combine({column,".", _ } ) )   )),
      ColumnsToOrder = List.Transform( Order, each _ &".Value"),
      ListOrder = List.Zip({ColumnsToOrder,List.Repeat({Order.Ascending}, List.Count(Order))}),
     #"Sorted Rows" = Table.Sort(Custom5,ListOrder),
@@ -228,14 +225,22 @@ JSON = Json.Document(x),
     Custom8 = List.Zip( {Custom6, List.Transform( Custom6, each Text.Replace(_, ".Name",""))} ),
     Custom9 = Custom7,
     #"Renamed Columns" = Table.RenameColumns(Custom9,Custom8),
-    Custom10 = #"Renamed Columns",
-    observation = JSON[observation],
-    Custom11 = Table.FromColumns( Table.ToColumns(Custom10) & {observation}, Order & {"Value"}),
-    #"Changed Type" = Table.TransformColumnTypes(Custom11, List.Zip( {Order, List.Repeat(  {type text}, List.Count(Order))}) ),
-    #"Changed Type1" = Table.TransformColumnTypes(#"Changed Type",{{"Value", type number}}, "en-US"),
-    #"Replaced Errors" = Table.ReplaceErrorValues(#"Changed Type1", {{"Value", null}})
+    Custom10 = Table.AddIndexColumn( #"Renamed Columns", "Index", 0, 1),
+    observation = Table.AddIndexColumn( Table.FromList( JSON[observation]), "Index", 0,1),
+    Custom11 = Table.NestedJoin( Custom10, {"Index"}, observation, {"Index"}, "New"),
+    #"Expanded New" = Table.ExpandTableColumn(Custom11, "New", {"Column1"}, {"Column1"}),
+    #"Removed Columns1" = Table.RemoveColumns(#"Expanded New",{"Index"}),
+    #"Renamed Columns1" = Table.RenameColumns(#"Removed Columns1",{{"Column1", "VALUE"}}),
+    #"Changed Type with Locale" = Table.TransformColumnTypes(#"Renamed Columns1", {{"VALUE", type number}}, "en-US"),
+    #"Changed Type2" = Table.TransformColumnTypes(#"Changed Type with Locale",{{"MEASURE", type text}, {"TIME", type text}, {"GEOGRAPHICAL", type text}}),
+    #"Replaced Errors" = Table.ReplaceErrorValues(#"Changed Type2", {{"VALUE", null}}),
+    #"Replaced Value" = Table.ReplaceValue(#"Replaced Errors","ABSOLUTE","Dato",Replacer.ReplaceText,{"MEASURE"}),
+    #"Replaced Value1" = Table.ReplaceValue(#"Replaced Value","ANNUAL_PERCENTAGE_RATE","Tasa variación anual",Replacer.ReplaceText,{"MEASURE"}),
+    #"Replaced Value2" = Table.ReplaceValue(#"Replaced Value1","INTERPERIOD_PERCENTAGE_RATE","Tasa variación interperiódica",Replacer.ReplaceText,{"MEASURE"}),
+    #"Replaced Value3" = Table.ReplaceValue(#"Replaced Value2","ANNUAL_PUNTUAL_RATE","Variación anual",Replacer.ReplaceText,{"MEASURE"}),
+    #"Replaced Value4" = Table.ReplaceValue(#"Replaced Value3","INTERPERIOD_PUNTUAL_RATE","Variación interperiódica",Replacer.ReplaceText,{"MEASURE"})
 in
-    #"Replaced Errors" ;
+    #"Replaced Value4";
 
 ISTAC.IndicatorGeographicGranularities= () as table =>
 let
@@ -419,7 +424,7 @@ Table.ToNavigationTable = (
             NavigationTable.NameColumn = nameColumn, 
             NavigationTable.DataColumn = dataColumn,
             NavigationTable.ItemKindColumn = itemKindColumn, 
-            Preview.DelayColumn = itemNameColumn, 
+            Preview.DelayColumn = dataColumn, 
             NavigationTable.IsLeafColumn = isLeafColumn
         ],
         navigationTable = Value.ReplaceType(table, newTableType)
