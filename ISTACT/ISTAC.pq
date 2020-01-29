@@ -320,7 +320,7 @@ ISTAC.VariableFamilies = () as table =>
     #"Expanded text" = Table.ExpandListColumn(#"Expanded name", "text"),
     #"Expanded text1" = Table.ExpandRecordColumn(#"Expanded text", "text", {"value", "lang"}, {"value", "lang"}),
     #"Filtered Rows" = Table.SelectRows(#"Expanded text1", each [lang] = "es"),
-    #"Added Custom" = Table.AddColumn(#"Filtered Rows", "Custom", each ISTAC.AlternatePagination([href]&"/variables?limit=2", "variable")),
+    #"Added Custom" = Table.AddColumn(#"Filtered Rows", "Custom", each try ISTAC.AlternatePagination([href]&"/variables?limit=2", "variable") otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error")),
     #"Renamed Columns" = Table.RenameColumns(#"Added Custom",{{"id", "Key"}, {"value", "Name"}}),
     #"Duplicated Column" = Table.DuplicateColumn(#"Renamed Columns", "Name", "ItemName"),
     #"Added Custom1" = Table.AddColumn(#"Duplicated Column", "IsLeaf", each false),
@@ -366,7 +366,7 @@ ISTAC.VariableFamiliesLevel3 = (x as table) =>
     AddItemKind = Table.AddColumn( #"Added Custom1", "ItemKind", each "Table"),
     ToNavTable = Table.ToNavigationTable( AddItemKind, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
 in
-try ToNavTable otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones") ;
+try ToNavTable otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error") ;
 
 
 ISTAC.VariableFamiliesLevel4 = (x as table) =>
@@ -377,7 +377,7 @@ ISTAC.VariableFamiliesLevel4 = (x as table) =>
     #"Changed Type" = type table [id =text, urn = text, selfLink = record, kind= text, name.text.value=  text,name.text.lang = text],
     Custom1 = Value.ReplaceType(#"Se expandió name.text1", #"Changed Type")
 in
-   try Custom1 otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones");
+   try Custom1 otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error");
 
 ISTAC = [
      TestConnection = (dataSourcePath) => { "ISTAC.Contents" },
