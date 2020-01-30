@@ -144,20 +144,24 @@ let
       Metadata = CubeMetadata( Source),
     ValuesColumn = CubeValuesAsTable(Source),
     DimensionColumns = CubeDimensions(Source, Metadata),
-    #"Merged Queries" = Table.NestedJoin(DimensionColumns, {"Index"}, ValuesColumn, {"Index"}, "ValuesAsTable", JoinKind.LeftOuter),
-    #"Removed Columns" = Table.RemoveColumns(#"Merged Queries",{"Index"}),
-    #"Expanded ValuesAsTable" = Table.ExpandTableColumn(#"Removed Columns", "ValuesAsTable", {"Values"}, {"Values"}),
-    #"Changed Type" = Table.TransformColumnTypes(#"Expanded ValuesAsTable",{{"Values", type number}}, "en-us")
+    Custom1 = Table.Paste(DimensionColumns,ValuesColumn),
+    #"Changed Type with Locale" = Table.TransformColumnTypes(Custom1, {{"Values", type number}}, "en-US")
 in
-    #"Changed Type";
+    #"Changed Type with Locale";
+
+Table.Paste = (table1, table2) => let id1 = Text.NewGuid(), id2 = Text.NewGuid() in
+        Table.RemoveColumns(
+            Table.Join(Table.AddIndexColumn(table1, id1), id1, 
+                       Table.AddIndexColumn(table2, id2), id2,
+                       JoinKind.FullOuter, JoinAlgorithm.SortMerge),
+            {id1, id2});
 
 CubeValuesAsTable = (x as record) as table =>
 let
     ValuesList = x[data],
     Values= Text.Split( ValuesList [observations], "|"), 
     Source = Table.FromList( Values, Splitter.SplitByNothing()),
-    Custom1 = Table.AddIndexColumn(  Source, "Index", 0),
-    #"Renamed Columns" = Table.RenameColumns(Custom1,{{"Column1", "Values"}})
+    #"Renamed Columns" = Table.RenameColumns(Source,{{"Column1", "Values"}})
 in
     #"Renamed Columns";
 
@@ -201,8 +205,7 @@ let
 (state, column) => Table.ExpandTableColumn(state, column&".value", {"value"}, {column&".label"}   )),
     Order = List.Zip({List.Transform(dimension[dimensionId], each _&".index"),  List.Repeat( {Order.Ascending }, List.Count(dimension[dimensionId]))}),
     Output = Table.Sort(Custom3, Order),
-    #"Added Index" = Table.AddIndexColumn(Output, "Index", 0, 1),
-    Custom4 = Table.RemoveColumns( #"Added Index", List.Transform(dimension[dimensionId], each _&".index" ))
+    Custom4 = Table.RemoveColumns( Output, List.Transform(dimension[dimensionId], each _&".index" ))
 in
     Custom4;
 
@@ -228,13 +231,10 @@ JSON = Json.Document(x),
     Custom7 = Table.SelectColumns(#"Sorted Rows", Custom6),
     Custom8 = List.Zip( {Custom6, List.Transform( Custom6, each Text.Replace(_, ".Name",""))} ),
     Custom9 = Custom7,
-    #"Renamed Columns" = Table.RenameColumns(Custom9,Custom8),
-    Custom10 = Table.AddIndexColumn( #"Renamed Columns", "Index", 0, 1),
-    observation = Table.AddIndexColumn( Table.FromList( JSON[observation]), "Index", 0,1),
-    Custom11 = Table.NestedJoin( Custom10, {"Index"}, observation, {"Index"}, "New"),
-    #"Expanded New" = Table.ExpandTableColumn(Custom11, "New", {"Column1"}, {"Column1"}),
-    #"Removed Columns1" = Table.RemoveColumns(#"Expanded New",{"Index"}),
-    #"Renamed Columns1" = Table.RenameColumns(#"Removed Columns1",{{"Column1", "VALUE"}}),
+    Dimensions = Table.RenameColumns(Custom9,Custom8),
+    observation = Table.FromList( JSON[observation]),
+    Custom11 = Table.Paste(Dimensions, observation),
+    #"Renamed Columns1" = Table.RenameColumns(Custom11,{{"Column1", "VALUE"}}),
     #"Changed Type with Locale" = Table.TransformColumnTypes(#"Renamed Columns1", {{"VALUE", type number}}, "en-US"),
     #"Changed Type2" = Table.TransformColumnTypes(#"Changed Type with Locale",{{"MEASURE", type text}, {"TIME", type text}, {"GEOGRAPHICAL", type text}}),
     #"Replaced Errors" = Table.ReplaceErrorValues(#"Changed Type2", {{"VALUE", null}}),
