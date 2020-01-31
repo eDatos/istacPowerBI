@@ -41,11 +41,20 @@ ISTAC.IndicatorNavTable = ()=>
 ISTAC.IndicadoresValoresAuxiliares = () =>
     let 
             objects = #table(  {"Name",       "Key",        "Data",                           "ItemKind", "ItemName", "IsLeaf"},{
-            {"Geográficos",      "Geográficos",  ISTAC.IndicatorGeographicGranularities() , "Table",    "Geográfico",    true}
+            {"Geográficos",      "Geográficos",  ISTAC.IndicatorGeographicGranularities() , "Table",    "Geográfico",    true},
+            {"Códigos de Períodos",      "Períodos",  ISTAC.PeriodCode() , "Table",    "Período",    true}
             }),
               NavTable = Table.ToNavigationTable(objects, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf") 
               in 
                   NavTable;
+
+ISTAC.PeriodCode = () =>
+    let
+    Source = Csv.Document(Extension.Contents("PeriodCodes.txt"),[Delimiter="	", Columns=3, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"code", type text}, {"Fecha", type date}, {"Granularidad", type text}}, "en-es")
+in
+    #"Changed Type";
 
 ISTAC.Indicadores = () as table =>
  let
@@ -145,9 +154,11 @@ let
     ValuesColumn = CubeValuesAsTable(Source),
     DimensionColumns = CubeDimensions(Source, Metadata),
     Custom1 = Table.Paste(DimensionColumns,ValuesColumn),
-    #"Changed Type with Locale" = Table.TransformColumnTypes(Custom1, {{"Values", type number}}, "en-US")
+    #"Changed Type with Locale" = Table.TransformColumnTypes(Custom1, {{"Values", type number}}, "en-US"),
+    Mergeperiod = Table.NestedJoin( #"Changed Type with Locale", {"TIME_PERIOD.code"}, ISTAC.PeriodCode(), {"code"}, "Período", JoinKind.LeftOuter),
+    Choose = if List.Contains( Table.ColumnNames( #"Changed Type with Locale"), "TIME_PERIOD.code") then Mergeperiod else    #"Changed Type with Locale" 
 in
-    #"Changed Type with Locale";
+    Choose;
 
 Table.Paste = (table1, table2) => let id1 = Text.NewGuid(), id2 = Text.NewGuid() in
         Table.RemoveColumns(
@@ -236,15 +247,16 @@ JSON = Json.Document(x),
     Custom11 = Table.Paste(Dimensions, observation),
     #"Renamed Columns1" = Table.RenameColumns(Custom11,{{"Column1", "VALUE"}}),
     #"Changed Type with Locale" = Table.TransformColumnTypes(#"Renamed Columns1", {{"VALUE", type number}}, "en-US"),
-    #"Changed Type2" = Table.TransformColumnTypes(#"Changed Type with Locale",{{"MEASURE", type text}, {"TIME", type text}, {"GEOGRAPHICAL", type text}}),
-    #"Replaced Errors" = Table.ReplaceErrorValues(#"Changed Type2", {{"VALUE", null}}),
+    #"Replaced Errors" = Table.ReplaceErrorValues(#"Changed Type with Locale", {{"VALUE", null}}),
     #"Replaced Value" = Table.ReplaceValue(#"Replaced Errors","ABSOLUTE","Dato",Replacer.ReplaceText,{"MEASURE"}),
     #"Replaced Value1" = Table.ReplaceValue(#"Replaced Value","ANNUAL_PERCENTAGE_RATE","Tasa variación anual",Replacer.ReplaceText,{"MEASURE"}),
     #"Replaced Value2" = Table.ReplaceValue(#"Replaced Value1","INTERPERIOD_PERCENTAGE_RATE","Tasa variación interperiódica",Replacer.ReplaceText,{"MEASURE"}),
     #"Replaced Value3" = Table.ReplaceValue(#"Replaced Value2","ANNUAL_PUNTUAL_RATE","Variación anual",Replacer.ReplaceText,{"MEASURE"}),
-    #"Replaced Value4" = Table.ReplaceValue(#"Replaced Value3","INTERPERIOD_PUNTUAL_RATE","Variación interperiódica",Replacer.ReplaceText,{"MEASURE"})
+    #"Replaced Value4" = Table.ReplaceValue(#"Replaced Value3","INTERPERIOD_PUNTUAL_RATE","Variación interperiódica",Replacer.ReplaceText,{"MEASURE"}),
+    AddPeriod = Table.NestedJoin( #"Replaced Value4", {"TIME"}, ISTAC.PeriodCode(), {"code"},"Período", JoinKind.LeftOuter),
+    Choose = if List.Contains( Order, "TIME") then AddPeriod else #"Replaced Value4"
 in
-    #"Replaced Value4";
+    Choose;
 
 ISTAC.IndicatorGeographicGranularities= () as table =>
 let
@@ -254,9 +266,11 @@ let
     #"Changed Type" = Table.TransformColumnTypes(#"Expanded title",{{"__default__", type text}, {"es", type text}, {"en", type text}, {"code", type text}}),
     #"Added Custom" = Table.AddColumn(#"Changed Type", "Value", each Table.FromRecords(  Json.Document(Web.Contents("https://www3.gobiernodecanarias.org/istac/api/indicators/v1.0/geographicalValues?geographicalGranularityCode="&[code]))[items], null, MissingField.UseNull)),
     #"Expanded Value" = Table.ExpandTableColumn(#"Added Custom", "Value", {"code", "title", "granularityCode", "latitude", "longitude"}, {"Value.code", "Value.title", "Value.granularityCode", "Value.latitude", "Value.longitude"}),
-    #"Changed Type1" = Table.TransformColumnTypes(#"Expanded Value",{{"Value.longitude", type number}, {"Value.latitude", type number}, {"Value.granularityCode", type text}, {"Value.code", type text}},  "en-US")
+    #"Changed Type1" = Table.TransformColumnTypes(#"Expanded Value",{{"Value.longitude", type number}, {"Value.latitude", type number}, {"Value.granularityCode", type text}, {"Value.code", type text}},  "en-US"),
+     #"Expanded Value.title" = Table.ExpandRecordColumn(#"Changed Type1", "Value.title", {"es", "en", "__default__"}, {"Value.title.es", "Value.title.en", "Value.title.__default__"}),
+    #"Changed Type2" = Table.TransformColumnTypes(#"Expanded Value.title",{{"Value.title.es", type text}, {"Value.title.en", type text}, {"Value.title.__default__", type text}})
 in
-    #"Changed Type1";
+    #"Changed Type2";
 
 ISTAC.IndicatorSubjects = () as table =>
     let
