@@ -399,11 +399,10 @@ ISTAC.VariableFamiliesLevel4 = (x as table) =>
     let
             #"Se expandió name" = Table.ExpandRecordColumn(x, "name", {"text"}, {"name.text"}),
     #"Se expandió name.text" = Table.ExpandListColumn(#"Se expandió name", "name.text"),
-    #"Se expandió name.text1" = Table.ExpandRecordColumn(#"Se expandió name.text", "name.text", {"value", "lang"}, {"name.text.value", "name.text.lang"}),
-    #"Changed Type" = type table [id =text, urn = text, selfLink = record, kind= text, name.text.value=  text,name.text.lang = text],
-    Custom1 = Value.ReplaceType(#"Se expandió name.text1", #"Changed Type")
+    #"Se expandió name.text1" = Table.ExpandRecordColumn(#"Se expandió name.text", "name.text", {"value", "lang"}, {"name.text.value", "name.text.lang"})
+   
 in
-   try Custom1 otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error");
+   try   #"Se expandió name.text1" otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error");
 
 ISTAC = [
      TestConnection = (dataSourcePath) => { "ISTAC.Contents" },
