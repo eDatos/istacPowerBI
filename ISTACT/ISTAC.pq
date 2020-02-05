@@ -52,7 +52,7 @@ ISTAC.PeriodCode = () =>
     let
     Source = Csv.Document(Extension.Contents("PeriodCodes.txt"),[Delimiter="	", Columns=3, Encoding=1252, QuoteStyle=QuoteStyle.None]),
     #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
-    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"code", type text}, {"Fecha", type date}, {"Granularidad", type text}}, "en-es")
+    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"code", type text}, {"Fecha", type date}, {"Granularidad", type text}}, "en-us")
 in
     #"Changed Type";
 
@@ -385,12 +385,15 @@ ISTAC.VariableFamiliesLevel3 = (x as table) =>
     #"Expanded selfLink" = Table.ExpandRecordColumn(#"Filtered Rows", "selfLink", {"kind", "href"}, {"kind.1", "href"}),
     #"Added Custom" = Table.AddColumn(#"Expanded selfLink", "Data", each ISTAC.VariableFamiliesLevel4( ISTAC.AlternatePagination([href] &"/codes.json?fields=+variableElement", "code"  ) )),
     #"Removed Other Columns" = Table.SelectColumns(#"Added Custom",{"urn", "value", "Data"}),
-    #"Renamed Columns" = Table.RenameColumns(#"Removed Other Columns",{{"value", "Name"}, {"urn", "Key"}}),
-    #"Duplicated Column" = Table.DuplicateColumn(#"Renamed Columns", "Name", "ItemName"),
+    TranformUrn =  Table.TransformColumns( #"Removed Other Columns", {{"urn", each Text.Split(_, "="){1}}}),
+    #"Renamed Columns" = Table.RenameColumns(TranformUrn,{{"value", "Name1"}, {"urn", "Key"}}),
+    AddNewName = Table.AddColumn(#"Renamed Columns", "Name", each [Name1] & " ["& [Key]& "]"),
+    #"Duplicated Column" = Table.DuplicateColumn(AddNewName, "Name", "ItemName"),
     #"Added Custom1" = Table.AddColumn(#"Duplicated Column", "IsLeaf", each true),
     AddItemKind = Table.AddColumn( #"Added Custom1", "ItemKind", each "Table"),
     TableOrder = Table.ReorderColumns(AddItemKind,{"Name", "Key", "Data", "ItemKind", "ItemName", "IsLeaf"}),
-    ToNavTable = Table.ToNavigationTable( TableOrder, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
+    Columns = Table.SelectColumns( TableOrder, {"Name", "Key", "Data", "ItemKind", "ItemName", "IsLeaf"}),
+    ToNavTable = Table.ToNavigationTable( Columns, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
 in
 try ToNavTable otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error") ;
 
@@ -399,10 +402,12 @@ ISTAC.VariableFamiliesLevel4 = (x as table) =>
     let
             #"Se expandió name" = Table.ExpandRecordColumn(x, "name", {"text"}, {"name.text"}),
     #"Se expandió name.text" = Table.ExpandListColumn(#"Se expandió name", "name.text"),
-    #"Se expandió name.text1" = Table.ExpandRecordColumn(#"Se expandió name.text", "name.text", {"value", "lang"}, {"name.text.value", "name.text.lang"})
+    #"Se expandió name.text1" = Table.ExpandRecordColumn(#"Se expandió name.text", "name.text", {"value", "lang"}, {"name.text.value", "name.text.lang"}),
+       #"Expanded variableElement" = Table.ExpandRecordColumn(#"Se expandió name.text1", "variableElement", {"id"}, {"variableElement.id"}),
+    #"Removed Other Columns" = Table.SelectColumns(#"Expanded variableElement",{"variableElement.id", "id", "name.text.value", "name.text.lang"})
    
 in
-   try   #"Se expandió name.text1" otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error");
+   try   #"Removed Other Columns" otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error");
 
 ISTAC = [
      TestConnection = (dataSourcePath) => { "ISTAC.Contents" },
