@@ -31,30 +31,11 @@ ISTAC.IndicatorNavTable = ()=>
         objects = #table(
             {"Name",       "Key",        "Data",                           "ItemKind", "ItemName", "IsLeaf"},{
             {"Indicadores",      "indicators",  ISTAC.Indicadores() , "Folder",    "Indicator",    false},
-            {"Sistemas de Indicadores", "SystemIndicators", ISTAC.SystemIndicators(), "Folder", "SystemIndicators", false}, 
-            {"Valores auxiliares",      "Auxiliares",  ISTAC.IndicadoresValoresAuxiliares(), "Folder",    "Auxiliares",    false}
-            }),
+            {"Sistemas de Indicadores", "SystemIndicators", ISTAC.SystemIndicators(), "Folder", "SystemIndicators", false} 
+           }),
         NavTable = Table.ToNavigationTable(objects, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf") 
     in
         NavTable;
-
-ISTAC.IndicadoresValoresAuxiliares = () =>
-    let 
-            objects = #table(  {"Name",       "Key",        "Data",                           "ItemKind", "ItemName", "IsLeaf"},{
-            {"Geográficos",      "Geográficos",  ISTAC.IndicatorGeographicGranularities() , "Table",    "Geográfico",    true},
-            {"Códigos de Períodos",      "Períodos",  ISTAC.PeriodCode() , "Table",    "Período",    true}
-            }),
-              NavTable = Table.ToNavigationTable(objects, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf") 
-              in 
-                  NavTable;
-
-ISTAC.PeriodCode = () =>
-    let
-    Source = Csv.Document(Extension.Contents("PeriodCodes.txt"),[Delimiter="	", Columns=3, Encoding=1252, QuoteStyle=QuoteStyle.None]),
-    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
-    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"code", type text}, {"Fecha", type date}, {"Granularidad", type text}}, "en-us")
-in
-    #"Changed Type";
 
 ISTAC.Indicadores = () as table =>
  let
@@ -150,15 +131,19 @@ ISTAC.Dataset = (url as text) as table =>
 let
   x = Binary.Buffer( Web.Contents(url , [Headers=[Accept="application/json"]]) ),
     Source = Json.Document(x),
+    DatasetID = Source[id],
+    DatasetName = Table.SelectRows( Table.FromRecords( Record.Field( Source[name], "text") ),  each [lang] = "es")[value]{0},
       Metadata = CubeMetadata( Source),
     ValuesColumn = CubeValuesAsTable(Source),
     DimensionColumns = CubeDimensions(Source, Metadata),
     Custom1 = Table.Paste(DimensionColumns,ValuesColumn),
     #"Changed Type with Locale" = Table.TransformColumnTypes(Custom1, {{"Values", type number}}, "en-US"),
-    Mergeperiod = Table.NestedJoin( #"Changed Type with Locale", {"TIME_PERIOD.code"}, ISTAC.PeriodCode(), {"code"}, "Período", JoinKind.LeftOuter),
-    Choose = if List.Contains( Table.ColumnNames( #"Changed Type with Locale"), "TIME_PERIOD.code") then Mergeperiod else    #"Changed Type with Locale" 
+    Mergeperiod = Table.AddColumn( #"Changed Type with Locale" , "Fecha", each fxTextToDate([TIME_PERIOD.granularity], [TIME_PERIOD.code])),
+    Choose = if List.Contains( Table.ColumnNames( #"Changed Type with Locale"), "TIME_PERIOD.code") then Mergeperiod else    #"Changed Type with Locale",
+    AddDatsetID = Table.AddColumn(Choose, "DatasetID", each DatasetID, type text),
+    AddDatasetName = Table.AddColumn(AddDatsetID, "DatasetName", each DatasetName, type text)
 in
-    Choose;
+    AddDatasetName;
 
 Table.Paste = (table1, table2) => let id1 = Text.NewGuid(), id2 = Text.NewGuid() in
         Table.RemoveColumns(
@@ -181,20 +166,56 @@ let
     metadata = x[metadata],
     dimensions = metadata[dimensions],
     dimension = dimensions[dimension],
-    Custom1 = Table.FromRecords( dimension ),
-    #"Expanded dimensionValues" = Table.ExpandRecordColumn(Custom1, "dimensionValues", {"value"}, {"value"}),
-    #"Expanded value" = Table.ExpandListColumn(#"Expanded dimensionValues", "value"),
-    #"Removed Columns" = Table.RemoveColumns(#"Expanded value",{"name"}),
-    #"Expanded value1" = Table.ExpandRecordColumn(#"Removed Columns", "value", {"id", "name"}, {"id.1", "name"}),
-    #"Expanded name" = Table.ExpandRecordColumn(#"Expanded value1", "name", {"text"}, {"text"}),
-    #"Expanded text" = Table.ExpandListColumn(#"Expanded name", "text"),
-    #"Expanded text1" = Table.ExpandRecordColumn(#"Expanded text", "text", {"value", "lang"}, {"value", "lang"}),
-    #"Filtered Rows" = Table.SelectRows(#"Expanded text1", each ([lang] = "es")),
-    #"Removed Columns1" = Table.RemoveColumns(#"Filtered Rows",{"lang"}),
-    Custom2 = Table.Buffer( #"Removed Columns1" ),
-    #"Renamed Columns" = Table.RenameColumns(Custom2,{{"id.1", "code"}})
+    Custom1 = Table.FromRecords(dimension),
+    #"Expanded {0}" = Table.ExpandRecordColumn(Custom1, "dimensionValues", {"value"}, {"value"}),
+    #"Expanded {0}1" = Table.ExpandListColumn(#"Expanded {0}", "value"),
+    #"Removed Columns2" = Table.RemoveColumns(#"Expanded {0}1",{"name"}),
+    #"Added Custom4" = Table.AddColumn(#"Removed Columns2", "Personalizado", each if [id] = "TIME_PERIOD" then CubeTimeGranularities([value]) else if [id] = "MEDIDAS" then CubeMeasureGranularities([value]) else if [id]= "TERRITORIO" then CubeTerritorioGranularities([value]) else null),
+    #"Removed Columns3" = Table.RemoveColumns(#"Added Custom4",{"value"}),
+    #"Expanded {0}2" = Table.ExpandTableColumn(#"Removed Columns3", "Personalizado", {"id", "value", "Granularity"}, {"id.1", "value.1", "Granularity"}),
+    #"Renamed Columns2" = Table.RenameColumns(#"Expanded {0}2",{{"id.1", "code"}, {"value.1", "value"}})
+in
+    #"Renamed Columns2";
+
+CubeTimeGranularities = (x as record) as table =>
+let
+    value1 = Table.FromRecords( {x}),
+    #"Renamed Columns2" = Table.RenameColumns(value1,{{"temporalGranularity", "Granularity"}}),
+    #"Expanded {0}2" = Table.ExpandRecordColumn(#"Renamed Columns2", "name", {"text"}, {"text"}),
+    #"Expanded {0}3" = Table.ExpandListColumn(#"Expanded {0}2", "text"),
+    #"Expanded {0}4" = Table.ExpandRecordColumn(#"Expanded {0}3", "text", {"value", "lang"}, {"value", "lang"}),
+    #"Filtered Rows1" = Table.SelectRows(#"Expanded {0}4", each [lang] = "es"),
+     RemoveLang = Table.RemoveColumns( #"Filtered Rows1", {"lang"})
+in
+   RemoveLang;
+CubeMeasureGranularities =  (x as record) =>
+let
+    value1 = Table.FromRecords( {x} ),
+    #"Expanded {0}" = Table.ExpandRecordColumn(value1, "name", {"text"}, {"text"}),
+    #"Expanded {0}1" = Table.ExpandListColumn(#"Expanded {0}", "text"),
+    #"Expanded {0}2" = Table.ExpandRecordColumn(#"Expanded {0}1", "text", {"value", "lang"}, {"value", "lang"}),
+    #"Filtered Rows" = Table.SelectRows(#"Expanded {0}2", each [lang] = "es"),
+    #"Removed Other Columns" = Table.SelectColumns(#"Filtered Rows",{"id", "value"})
+in
+    #"Removed Other Columns";
+
+CubeTerritorioGranularities = (x as record) =>
+let
+    value = Table.FromRecords( {x} ),
+    #"Expanded {0}" = Table.ExpandRecordColumn(value, "geographicGranularity", {"id", "urn", "selfLink", "name", "kind"}, {"id.1", "urn.1", "selfLink.1", "name.1", "kind.1"}),
+    #"Expanded {0}1" = Table.ExpandRecordColumn(#"Expanded {0}", "name.1", {"text"}, {"text"}),
+    #"Expanded {0}2" = Table.ExpandListColumn(#"Expanded {0}1", "text"),
+    #"Expanded {0}3" = Table.ExpandRecordColumn(#"Expanded {0}2", "text", {"value", "lang"}, {"value", "lang"}),
+    #"Expanded {0}4" = Table.ExpandRecordColumn(#"Expanded {0}3", "name", {"text"}, {"name.text"}),
+    #"Expanded {0}5" = Table.ExpandListColumn(#"Expanded {0}4", "name.text"),
+    #"Expanded {0}6" = Table.ExpandRecordColumn(#"Expanded {0}5", "name.text", {"value", "lang"}, {"name.text.value", "name.text.lang"}),
+    #"Filtered Rows" = Table.SelectRows(#"Expanded {0}6", each [lang] = "es"),
+    #"Filtered Rows1" = Table.SelectRows(#"Filtered Rows", each [name.text.lang] = "es"),
+    #"Removed Other Columns1" = Table.SelectColumns(#"Filtered Rows1",{"name.text.value", "id", "id.1"}),
+    #"Renamed Columns" = Table.RenameColumns(#"Removed Other Columns1",{{"name.text.value", "value"}, {"id.1", "Granularity"}})
 in
     #"Renamed Columns";
+
 
 CubeDimensions = (x as record, y as table) as table =>
 let
@@ -211,14 +232,17 @@ let
     Custom2 = List.Accumulate( dimension[dimensionId], 
  #"Expanded TERRITORIO",
 (state, column) => Table.NestedJoin(state, {column&".code"}, Table.SelectRows( y, each [id]= column), {"code"}, column&".value" )),
-    Custom3 = List.Accumulate( dimension[dimensionId] , 
+    Custom3 =List.Accumulate( dimension[dimensionId] , 
  Custom2,
-(state, column) => Table.ExpandTableColumn(state, column&".value", {"value"}, {column&".label"}   )),
+(state, column) => Table.ExpandTableColumn(state, column&".value", {"value", "Granularity"}, {column&".label", column&".granularity"}   )),
     Order = List.Zip({List.Transform(dimension[dimensionId], each _&".index"),  List.Repeat( {Order.Ascending }, List.Count(dimension[dimensionId]))}),
     Output = Table.Sort(Custom3, Order),
-    Custom4 = Table.RemoveColumns( Output, List.Transform(dimension[dimensionId], each _&".index" ))
+    Custom4 = Table.RemoveColumns( Output, List.Transform(dimension[dimensionId], each _&".index" )),
+    ColumnsSelect = List.Select( Table.ColumnNames(Custom4), each  Text.Contains(_, ".label") or Text.Contains(_, ".granularity")),
+    ColumnsToDelete =  List.Select(ColumnsSelect, each not (Text.Contains(_, "TIME_PERIOD") or Text.Contains(_, "TERRITORIO") or Text.Contains(_, "MEDIDAS.label") ) ),
+    RemoveColumns = Table.RemoveColumns( Custom4, ColumnsToDelete)
 in
-    Custom4;
+    RemoveColumns;
 
 TransformBinary.Indicadores= (url as text) as table =>
 let
@@ -253,24 +277,10 @@ JSON = Json.Document(x),
     #"Replaced Value2" = Table.ReplaceValue(#"Replaced Value1","INTERPERIOD_PERCENTAGE_RATE","Tasa variación interperiódica",Replacer.ReplaceText,{"MEASURE"}),
     #"Replaced Value3" = Table.ReplaceValue(#"Replaced Value2","ANNUAL_PUNTUAL_RATE","Variación anual",Replacer.ReplaceText,{"MEASURE"}),
     #"Replaced Value4" = Table.ReplaceValue(#"Replaced Value3","INTERPERIOD_PUNTUAL_RATE","Variación interperiódica",Replacer.ReplaceText,{"MEASURE"}),
-    AddPeriod = Table.NestedJoin( #"Replaced Value4", {"TIME"}, ISTAC.PeriodCode(), {"code"},"Período", JoinKind.LeftOuter),
+    AddPeriod =  #"Replaced Value4",
     Choose = if List.Contains( Order, "TIME") then AddPeriod else #"Replaced Value4"
 in
     Choose;
-
-ISTAC.IndicatorGeographicGranularities= () as table =>
-let
-    Source = Json.Document(Web.Contents("https://www3.gobiernodecanarias.org/istac/api/indicators/v1.0/geographicGranularities")),
-    items = Table.FromRecords(Source[items], null, MissingField.UseNull),
-    #"Expanded title" = Table.ExpandRecordColumn(items, "title", {"en", "es", "__default__"}, {"en", "es", "__default__"}),
-    #"Changed Type" = Table.TransformColumnTypes(#"Expanded title",{{"__default__", type text}, {"es", type text}, {"en", type text}, {"code", type text}}),
-    #"Added Custom" = Table.AddColumn(#"Changed Type", "Value", each Table.FromRecords(  Json.Document(Web.Contents("https://www3.gobiernodecanarias.org/istac/api/indicators/v1.0/geographicalValues?geographicalGranularityCode="&[code]))[items], null, MissingField.UseNull)),
-    #"Expanded Value" = Table.ExpandTableColumn(#"Added Custom", "Value", {"code", "title", "granularityCode", "latitude", "longitude"}, {"Value.code", "Value.title", "Value.granularityCode", "Value.latitude", "Value.longitude"}),
-    #"Changed Type1" = Table.TransformColumnTypes(#"Expanded Value",{{"Value.longitude", type number}, {"Value.latitude", type number}, {"Value.granularityCode", type text}, {"Value.code", type text}},  "en-US"),
-     #"Expanded Value.title" = Table.ExpandRecordColumn(#"Changed Type1", "Value.title", {"es", "en", "__default__"}, {"Value.title.es", "Value.title.en", "Value.title.__default__"}),
-    #"Changed Type2" = Table.TransformColumnTypes(#"Expanded Value.title",{{"Value.title.es", type text}, {"Value.title.en", type text}, {"Value.title.__default__", type text}})
-in
-    #"Changed Type2";
 
 ISTAC.IndicatorSubjects = () as table =>
     let
@@ -351,8 +361,9 @@ ISTAC.VariableFamilies = () as table =>
     #"Removed Other Columns" = Table.SelectColumns(#"Added Custom2",{"IsLeaf", "ItemKind", "ItemName", "Custom", "Name", "Key"}),
     #"Added Custom3" = Table.AddColumn(#"Removed Other Columns", "Data", each ISTAC.VariableFamiliesLevel2 ([Custom])),
     #"Removed Columns" = Table.RemoveColumns(#"Added Custom3",{"Custom"}),
-       RemoveLabels = Table.ReplaceValue( #"Removed Columns" ,"Familia de Variables ","",Replacer.ReplaceText,{"Name"}),
-       TableOrder = Table.ReorderColumns(RemoveLabels,{"Name", "Key", "Data", "ItemKind", "ItemName", "IsLeaf"}),
+       RemoveLabels = Table.ReplaceValue( #"Removed Columns" ,"Familia de Variables de","",Replacer.ReplaceText,{"Name"}),
+       RemoveLabels1 = Table.ReplaceValue( RemoveLabels ,"Familia de Variables ","",Replacer.ReplaceText,{"Name"}),
+       TableOrder = Table.ReorderColumns(RemoveLabels1,{"Name", "Key", "Data", "ItemKind", "ItemName", "IsLeaf"}),
      ToNavTable = Table.ToNavigationTable( TableOrder, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf")
 in
 try ToNavTable otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error");
@@ -455,3 +466,48 @@ Table.ToNavigationTable = (
         navigationTable = Value.ReplaceType(table, newTableType)
     in
         navigationTable;
+
+fxYearly =  (x as text) as text => x & "0101";
+
+fxBiYearly = (x as text) as text =>
+let
+GetRidOfDashes = Text.Replace(x, "-",""),
+Year = Text.Start(GetRidOfDashes, 4),
+ExtractText = Text.End(GetRidOfDashes,  Text.Length(GetRidOfDashes) -4), 
+SplitbyH= Text.Split(ExtractText, "H" ){1},
+Month = Text.PadStart( Text.From( ( Number.From(SplitbyH) - 1 ) * 6 +1 ),2,"0"),
+Output = Year&Month&"01"
+in
+Output;
+
+fxQuarterly = (x as text) as text =>
+let
+GetRidOfDashes = Text.Replace(x, "-",""),
+Year = Text.Start(GetRidOfDashes, 4),
+ExtractText = Text.End(GetRidOfDashes,  Text.Length(GetRidOfDashes) -4), 
+SplitbyH= Text.Split(ExtractText, "Q" ){1},
+Month = Text.PadStart( Text.From( ( Number.From(SplitbyH) - 1 ) * 3 +1 ),2,"0"),
+Output = Year&Month&"01"
+in
+Output;
+
+fxMonthly = (x as text) as text =>
+let
+GetRidOfDashes = Text.Replace(x, "-",""),
+Year = Text.Start(GetRidOfDashes, 4),
+ExtractText = Text.End(GetRidOfDashes,  Text.Length(GetRidOfDashes) -4), 
+SplitbyH= Text.Split(ExtractText, "M" ){1},
+Month = Text.PadStart( SplitbyH,2,"0"),
+Output = Year&Month&"01"
+in
+Output;
+
+fxTextToDate = (granularity as text, code as text) as date =>
+    let
+        FunctionSelect = if granularity = "YEARLY" then fxYearly(code) else if granularity = "BIYEARLY" then fxBiYearly(code) else if granularity = "QUARTERLY" then fxQuarterly(code) else if granularity = "DAILY" then code else if granularity = "MONTHLY" then fxMonthly(code) else null,
+        Year= Number.From(Text.Start(FunctionSelect,4)),
+        Month = Number.From( Text.Start( Text.End(FunctionSelect,4),2)),
+        Day = Number.From(Text.End( FunctionSelect, 2)),
+        ToDate = #date( Year, Month, Day)
+        in
+            ToDate;
