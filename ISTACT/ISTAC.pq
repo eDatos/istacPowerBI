@@ -246,6 +246,8 @@ in
 
 TransformBinary.Indicadores= (url as text) as table =>
 let
+Metadata = Indicadores.Metadata(url),
+y = Metadata[Data],
 x= Binary.Buffer( Web.Contents(url & "/data", [Headers=[Accept="application/json"]]) ),
 JSON = Json.Document(x),
     Order = JSON[format],
@@ -259,42 +261,49 @@ JSON = Json.Document(x),
      Custom5= List.Accumulate( Order, 
 #"Promoted Headers",
 (state, column) => Table.ExpandTableColumn(state, column, {"Name", "Value"}, List.Transform({"Name", "Value"}, each Text.Combine({column,".", _ } ) )   )),
+     NewOne = List.Accumulate( Order, 
+ Custom5,
+(state, column) => Table.NestedJoin(state, {column&".Name"}, Table.SelectRows( y, each [id]= column), {"code"}, column&".value" )),
+     NewOne2 = List.Accumulate( Order , 
+ NewOne,
+(state, column) => Table.ExpandTableColumn(state, column&".value", {"value", "Granularity", "latitude", "longitude"}, {column&".label", column&".granularity", column&".latitude", column&".longitude"}   )),
      ColumnsToOrder = List.Transform( Order, each _ &".Value"),
      ListOrder = List.Zip({ColumnsToOrder,List.Repeat({Order.Ascending}, List.Count(Order))}),
-    #"Sorted Rows" = Table.Sort(Custom5,ListOrder),
-    Custom6 = List.Select( Table.ColumnNames( #"Sorted Rows"), each Text.EndsWith(_, ".Name")),
-    Custom7 = Table.SelectColumns(#"Sorted Rows", Custom6),
-    Custom8 = List.Zip( {Custom6, List.Transform( Custom6, each Text.Replace(_, ".Name",""))} ),
-    Custom9 = Custom7,
-    Dimensions = Table.RenameColumns(Custom9,Custom8),
+    #"Sorted Rows" = Table.Sort(NewOne2,ListOrder),
+    Custom9 = #"Sorted Rows",
     observation = Table.FromList( JSON[observation]),
-    Custom11 = Table.Paste(Dimensions, observation),
+    Custom11 = Table.Paste(Custom9, observation),
     #"Renamed Columns1" = Table.RenameColumns(Custom11,{{"Column1", "VALUE"}}),
     #"Changed Type with Locale" = Table.TransformColumnTypes(#"Renamed Columns1", {{"VALUE", type number}}, "en-US"),
-    #"Replaced Errors" = Table.ReplaceErrorValues(#"Changed Type with Locale", {{"VALUE", null}}),
-    #"Replaced Value" = Table.ReplaceValue(#"Replaced Errors","ABSOLUTE","Dato",Replacer.ReplaceText,{"MEASURE"}),
-    #"Replaced Value1" = Table.ReplaceValue(#"Replaced Value","ANNUAL_PERCENTAGE_RATE","Tasa variación anual",Replacer.ReplaceText,{"MEASURE"}),
-    #"Replaced Value2" = Table.ReplaceValue(#"Replaced Value1","INTERPERIOD_PERCENTAGE_RATE","Tasa variación interperiódica",Replacer.ReplaceText,{"MEASURE"}),
-    #"Replaced Value3" = Table.ReplaceValue(#"Replaced Value2","ANNUAL_PUNTUAL_RATE","Variación anual",Replacer.ReplaceText,{"MEASURE"}),
-    #"Replaced Value4" = Table.ReplaceValue(#"Replaced Value3","INTERPERIOD_PUNTUAL_RATE","Variación interperiódica",Replacer.ReplaceText,{"MEASURE"}),
-    AddPeriod =  #"Replaced Value4",
-    Choose = if List.Contains( Order, "TIME") then AddPeriod else #"Replaced Value4"
+    Custom1 = Table.RemoveColumns(#"Changed Type with Locale", List.Select( Table.ColumnNames( #"Changed Type with Locale" ), each Text.Contains(_, ".Value"))),
+    Custom2 = Table.RemoveColumns(Custom1, List.Select( Table.ColumnNames( Custom1 ), each  Text.Contains(_, ".granularity") and  _<>"GEOGRAPHICAL.granularity" and _ <> "TIME.granularity") ),
+    Custom4 = Table.RemoveColumns(Custom2, List.Select( Table.ColumnNames( Custom2 ), each  (Text.Contains(_, ".latitude") or Text.Contains(_, ".longitude") )  and  _<>"GEOGRAPHICAL.latitude" and _ <> "GEOGRAPHICAL.longitude") ),
+    #"Replaced Errors" = Table.ReplaceErrorValues(Custom4, {{"VALUE", null}}),
+    AddPeriod =  Table.AddColumn( #"Replaced Errors", "Fecha" , each fxTextToDate([TIME.granularity],[TIME.Name]), type date),
+    Choose = if List.Contains( Order, "TIME") then AddPeriod else #"Replaced Errors",
+    AddTitle = Table.AddColumn(Choose, "Nombre de Indicador", each Metadata[Title], type text),
+    AddCode = Table.AddColumn(AddTitle, "Código de Indicador", each Metadata[code], type text)
 in
-    Choose;
+    AddCode;
 
-ISTAC.IndicatorSubjects = () as table =>
-    let
-    Source = Json.Document(Web.Contents("https://www3.gobiernodecanarias.org/istac/api/indicators/v1.0/subjects"))[items],
-    Custom1 = Table.FromRecords( Source )
+Indicadores.Metadata = (url as text) as record =>
+    let 
+    Custom1 = Json.Document(Web.Contents( url)),
+    Code = Custom1[id],
+    IndicatorSubject = Custom1[subjectTitle]?[es],
+    Custom2 = Custom1[dimension],
+    #"Converted to Table" = Record.ToTable(Custom2),
+    #"Expanded {0}" = Table.ExpandRecordColumn(#"Converted to Table", "Value", {"code", "granularity", "representation"}, {"Value.code", "Value.granularity", "Value.representation"}),
+    #"Removed Columns" = Table.RemoveColumns(#"Expanded {0}",{"Value.code"}),
+    #"Expanded {0}1" = Table.ExpandListColumn(#"Removed Columns", "Value.representation"),
+    #"Removed Columns2" = Table.RemoveColumns(#"Expanded {0}1",{"Value.granularity"}),
+    #"Expanded {0}2" = Table.ExpandRecordColumn(#"Removed Columns2", "Value.representation", {"code", "title", "latitude", "longitude", "granularityCode"}, {"Value.representation.code", "Value.representation.title", "Value.representation.latitude", "Value.representation.longitude", "Value.representation.granularityCode"}),
+    #"Expanded {0}3" = Table.ExpandRecordColumn(#"Expanded {0}2", "Value.representation.title", {"__default__"}, {"Value.representation.title.__default__"}),
+    #"Removed Other Columns" = Table.SelectColumns(#"Expanded {0}3",{"Name", "Value.representation.code", "Value.representation.title.__default__", "Value.representation.latitude", "Value.representation.longitude", "Value.representation.granularityCode"}),
+    #"Renamed Columns" = Table.RenameColumns(#"Removed Other Columns",{{"Name", "id"}, {"Value.representation.code", "code"}, {"Value.representation.title.__default__", "value"}, {"Value.representation.granularityCode", "Granularity"}, {"Value.representation.latitude", "latitude"}, {"Value.representation.longitude", "longitude"}}),
+    Custom3 = [Data=#"Renamed Columns", code = Code, Title = Custom1[title]?[es]]
 in
-    Custom1;
-
-ISTAC.IndicatorTimeSeries = () as table =>
-    let
-    Source = Json.Document(Web.Contents("https://www3.gobiernodecanarias.org/istac/api/indicators/v1.0/timeGranularities"))[items],
-    Custom1 = Table.FromRecords( Source )
-in
-    Custom1;
+    Custom3;
 
 ISTAC.SystemIndicators = () =>
     let
