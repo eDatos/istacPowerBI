@@ -19,9 +19,8 @@ NavigationType = type function () as table meta [
         objects = #table(
             {"Name",       "Key",        "Data",                           "ItemKind", "ItemName", "IsLeaf"},{
             {"Indicadores",      "indicators",  ISTAC.IndicatorNavTable() , "Folder",    "Indicator",    false},
-            {"Cubos",      "Cubos",  ISTAC.SistemasEstadisticos (), "Folder",    "Cubos",    false},
-            {"Clasificaciones",      "Clasificaciones",  ISTAC.VariableFamilies() , "Folder",    "Clasificaciones",    false},
-            {"GET Clasificaciones", "GET Clasificaicones", ISTAC.GetClasificaciones, "Function", "GET Clasificaciones", true}
+            {"Cubos",      "Cubos",  ISTAC.CubosNavTable (), "Folder",    "Cubos",    false},
+            {"Clasificaciones",      "Clasificaciones",  ISTAC.ClasificacionesNavTable(), "Folder",    "Clasificaciones",    false}
             }),
         NavTable = Table.ToNavigationTable(objects, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf") 
     in
@@ -32,12 +31,83 @@ ISTAC.IndicatorNavTable = ()=>
         objects = #table(
             {"Name",       "Key",        "Data",                           "ItemKind", "ItemName", "IsLeaf"},{
             {"Indicadores",      "indicators",  ISTAC.Indicadores() , "Folder",    "Indicator",    false},
-            {"Sistemas de Indicadores", "SystemIndicators", ISTAC.SystemIndicators(), "Folder", "SystemIndicators", false} 
+            {"Sistemas de Indicadores", "SystemIndicators", ISTAC.SystemIndicators(), "Folder", "SystemIndicators", false},
+            {"URL del indicador / instancia de indicador", "GETIndicadores", ISTAC.GETIndicadores, "Function", "URL del indicador / instancia de indicador", true}
            }),
         NavTable = Table.ToNavigationTable(objects, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf") 
     in
         NavTable;
 
+ISTAC.CubosNavTable = ()=> 
+      let
+        objects = #table(
+            {"Name",       "Key",        "Data",                           "ItemKind", "ItemName", "IsLeaf"},{
+            {"Cubos",      "Cubos",  ISTAC.SistemasEstadisticos (), "Folder",    "Cubos",    false},
+            {"URL del cubo / consulta de datos", "GETClasificaciones", ISTAC.GETDataset, "Function", "URL del cubo / consulta de datos", true}
+           }),
+        NavTable = Table.ToNavigationTable(objects, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf") 
+    in
+        NavTable;
+
+ISTAC.ClasificacionesNavTable = ()=> 
+      let
+        objects = #table(
+            {"Name",       "Key",        "Data",                           "ItemKind", "ItemName", "IsLeaf"},{
+            {"Clasificaciones",      "Clasificaciones",  ISTAC.VariableFamilies() , "Folder",    "Indicator",    false},
+            {"URL de la clasificación", "GETClasificaciones", ISTAC.GetClasificaciones, "Function", "URL de la clasificación", true}
+           }),
+        NavTable = Table.ToNavigationTable(objects, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf") 
+    in
+        NavTable;
+
+ISTAC.GETDataset = Value.ReplaceType(ISTAC.Dataset, fxCubosType);
+
+fxCubosType = type function (
+url as (type text meta [
+        Documentation.FieldCaption = "url",
+        Documentation.SampleValues = {"https://www3.gobiernodecanarias.org/istac/api/statistical-resources/v1.0/datasets/ISTAC/C00010A_000001/001.005"}
+    ])) as table meta [                  
+        Documentation.Name = "URL del cubo / consulta de datos",
+        Documentation.LongDescription = "Obtiene un cubo o dataset partir de una url",
+        Documentation.Examples = {[
+            Description = "Obtiene un cubo o dataset partir de una url",
+             Code = "Función(""https://www3.gobiernodecanarias.org/istac/api/statistical-resources/v1.0/datasets/ISTAC/C00010A_000001/001.005"")",
+            Result = "Una tabla con datos de Cubos / Datasets"
+        ]}
+    ];
+
+ISTAC.GetClasificaciones = Value.ReplaceType(GetClasificaciones, fxClasificacionesType);
+
+fxClasificacionesType = type function (
+url as (type text meta [
+        Documentation.FieldCaption = "url",
+        Documentation.SampleValues = {"https://www3.gobiernodecanarias.org/istac/api/structural-resources/v1.0/codelists/ISTAC/CL_AREA_ES70_DS_20030525/01.000"}
+    ])) as table meta [                  
+        Documentation.Name = "URL de la clasificación",
+        Documentation.LongDescription = "Obtiene los datos de clasificaciones a partir de una url",
+        Documentation.Examples = {[
+            Description = "Obtiene los datos de clasificaciones a partir de una url",
+             Code = "Función(""https://www3.gobiernodecanarias.org/istac/api/structural-resources/v1.0/codelists/ISTAC/CL_AREA_ES70_DS_20030525/01.000"")",
+            Result = "Una tabla con datos de Clasificaciones"
+        ]}
+    ];
+
+ISTAC.GETIndicadores = Value.ReplaceType(TransformBinary.Indicadores, fxIndicadoresType);    
+
+fxIndicadoresType = type function (
+url as (type text meta [
+        Documentation.FieldCaption = "url",
+        Documentation.SampleValues = {"https://www3.gobiernodecanarias.org/istac/api/indicators/v1.0/indicators/AFILIACIONES", "https://www3.gobiernodecanarias.org/istac/api/indicators/v1.0/indicatorsSystems/C00062A/indicatorsInstances/84a4dd11-dbb7-4592-8799-516d9f432688"}
+    ])) as table meta [                  
+        Documentation.Name = "URL del indicador / instancia de indicador",
+        Documentation.LongDescription = "Obtiene los datos de indicadores y sistemas de indicadores a partir de una url",
+        Documentation.Examples = {[
+            Description = "Obtiene los datos de indicadores y sistemas de indicadores a partir de una url",
+            Code = "Función(""https://www3.gobiernodecanarias.org/istac/api/indicators/v1.0/indicators/AFILIACIONES"")",
+            Result = "Una tabla con datos de indicadores"
+
+        ]}
+    ];
 ISTAC.Indicadores = () as table =>
  let
      Source = ISTAC.AlternatePagination("https://www3.gobiernodecanarias.org/istac/api/indicators/v1.0/indicators?limit=1000", "items"),
@@ -431,7 +501,7 @@ ISTAC.VariableFamiliesLevel4 = (x as table) =>
 in
    try   #"Removed Other Columns" otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error");
 
-ISTAC.GetClasificaciones = ( url as text) as table =>
+GetClasificaciones = ( url as text) as table =>
     ISTAC.VariableFamiliesLevel4( ISTAC.AlternatePagination(url &"/codes.json?fields=+variableElement", "code"  ) );
 
 ISTAC = [
