@@ -20,7 +20,8 @@ NavigationType = type function () as table meta [
             {"Name",       "Key",        "Data",                           "ItemKind", "ItemName", "IsLeaf"},{
             {"Indicadores",      "indicators",  ISTAC.IndicatorNavTable() , "Folder",    "Indicator",    false},
             {"Cubos",      "Cubos",  ISTAC.SistemasEstadisticos (), "Folder",    "Cubos",    false},
-            {"Clasificaciones",      "Clasificaciones",  ISTAC.VariableFamilies() , "Folder",    "Clasificaciones",    false}
+            {"Clasificaciones",      "Clasificaciones",  ISTAC.VariableFamilies() , "Folder",    "Clasificaciones",    false},
+            {"GET Clasificaciones", "GET Clasificaicones", ISTAC.GetClasificaciones, "Function", "GET Clasificaciones", true}
             }),
         NavTable = Table.ToNavigationTable(objects, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf") 
     in
@@ -356,13 +357,13 @@ in
 
 ISTAC.VariableFamilies = () as table =>
   let
-   Source = ISTAC.AlternatePagination("https://www3.gobiernodecanarias.org/istac/api/structural-resources/v1.0/variablefamilies?limit=25", "variableFamily"),
+   Source = ISTAC.AlternatePagination("https://www3.gobiernodecanarias.org/istac/api/structural-resources/v1.0/variablefamilies?limit=1000", "variableFamily"),
     #"Expanded selfLink" = Table.ExpandRecordColumn(Source, "selfLink", {"kind", "href"}, {"kind.1", "href"}),
     #"Expanded name" = Table.ExpandRecordColumn(#"Expanded selfLink", "name", {"text"}, {"text"}),
     #"Expanded text" = Table.ExpandListColumn(#"Expanded name", "text"),
     #"Expanded text1" = Table.ExpandRecordColumn(#"Expanded text", "text", {"value", "lang"}, {"value", "lang"}),
     #"Filtered Rows" = Table.SelectRows(#"Expanded text1", each [lang] = "es"),
-    #"Added Custom" = Table.AddColumn(#"Filtered Rows", "Custom", each try ISTAC.AlternatePagination([href]&"/variables?limit=2", "variable") otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error")),
+    #"Added Custom" = Table.AddColumn(#"Filtered Rows", "Custom", each try ISTAC.AlternatePagination([href]&"/variables?limit=1000", "variable") otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error")),
     #"Renamed Columns" = Table.RenameColumns(#"Added Custom",{{"id", "Key"}, {"value", "Name"}}),
     #"Duplicated Column" = Table.DuplicateColumn(#"Renamed Columns", "Name", "ItemName"),
     #"Added Custom1" = Table.AddColumn(#"Duplicated Column", "IsLeaf", each false),
@@ -382,12 +383,13 @@ let
    #"Expanded name" = Table.ExpandRecordColumn(x, "name", {"text"}, {"text"}),
     #"Expanded text" = Table.ExpandListColumn(#"Expanded name", "text"),
     #"Expanded text1" = Table.ExpandRecordColumn(#"Expanded text", "text", {"value", "lang"}, {"value", "lang"}),
-    #"Expanded selfLink" = Table.ExpandRecordColumn(#"Expanded text1", "selfLink", {"kind", "href"}, {"kind.1", "href"}),
+      #"Filtered Rows" = Table.SelectRows(#"Expanded text1", each ([lang] = "es")),
+    #"Expanded selfLink" = Table.ExpandRecordColumn( #"Filtered Rows" , "selfLink", {"kind", "href"}, {"kind.1", "href"}),
     #"Renamed Columns" = Table.RenameColumns(#"Expanded selfLink",{{"value", "Name"}, {"id", "Key"}}),
     #"Duplicated Column" = Table.DuplicateColumn(#"Renamed Columns", "Name", "ItemName"),
     #"Added Custom1" = Table.AddColumn(#"Duplicated Column", "IsLeaf", each false),
     AddItemKind = Table.AddColumn( #"Added Custom1", "ItemKind", each "Folder"),
-    #"Added Custom" = Table.AddColumn(AddItemKind, "Custom", each try ISTAC.AlternatePagination("https://www3.gobiernodecanarias.org/istac/api/structural-resources/v1.0/codelists?query=VARIABLE_URN%20EQ%20%22urn%3Asiemac%3Aorg.siemac.metamac.infomodel.structuralresources.Variable%3D" & [Key] & "%22 ", "codelist") otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error")),
+    #"Added Custom" = Table.AddColumn(AddItemKind, "Custom", each try ISTAC.AlternatePagination("https://www3.gobiernodecanarias.org/istac/api/structural-resources/v1.0/codelists/~latest?query=VARIABLE_URN%20EQ%20%22urn%3Asiemac%3Aorg.siemac.metamac.infomodel.structuralresources.Variable%3D" & [Key] & "%22 ", "codelist") otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error")),
     #"Added Custom2" = Table.AddColumn(#"Added Custom", "Data", each ISTAC.VariableFamiliesLevel3([Custom])),
     #"Removed Other Columns" = Table.SelectColumns(#"Added Custom2",{"Key", "Name", "ItemName", "IsLeaf", "ItemKind", "Data"}),
    RemoveLabels = Table.ReplaceValue(  #"Removed Other Columns" ,"Variable ","",Replacer.ReplaceText,{"Name"}),
@@ -428,6 +430,9 @@ ISTAC.VariableFamiliesLevel4 = (x as table) =>
    
 in
    try   #"Removed Other Columns" otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error");
+
+ISTAC.GetClasificaciones = ( url as text) as table =>
+    ISTAC.VariableFamiliesLevel4( ISTAC.AlternatePagination(url &"/codes.json?fields=+variableElement", "code"  ) );
 
 ISTAC = [
      TestConnection = (dataSourcePath) => { "ISTAC.Contents" },

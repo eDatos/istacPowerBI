@@ -1,5 +1,8 @@
-﻿// Use this file to write queries to test your data connector
-let
-    result = ISTAC.Dataset("https://www3.gobiernodecanarias.org/istac/api/statistical-resources/v1.0/datasets/ISTAC/C00010A_000012/~latest.json")
+﻿let
+    Source = ISTAC.Contents(),
+    Clasificaciones = Source{[Key="Clasificaciones"]}[Data],
+    VRF_DEMOGRAFICAS = Clasificaciones{[Key="VRF_DEMOGRAFICAS"]}[Data],
+    VR_SEXO = VRF_DEMOGRAFICAS{[Key="VR_SEXO"]}[Data],
+    #"ESTAT:CL_SEX(1.1)" = VR_SEXO{[Key="ESTAT:CL_SEX(1.1)"]}[Data]
 in
-    result
+    #"ESTAT:CL_SEX(1.1)"
