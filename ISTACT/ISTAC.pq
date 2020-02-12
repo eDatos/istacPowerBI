@@ -317,9 +317,12 @@ in
 
 TransformBinary.Indicadores= (url as text) as table =>
 let
+    MainUrlByParts = Uri.Parts( url ),
+    DataUrl = "https://"& MainUrlByParts[Host] &MainUrlByParts[Path] &"/data" & "?"& Uri.BuildQueryString( MainUrlByParts[Query]),
+    DataUrlWithQuery = DataUrl &"?"& Uri.BuildQueryString( MainUrlByParts[Query]),
 Metadata = Indicadores.Metadata(url),
 y = Metadata[Data],
-x= Binary.Buffer( Web.Contents(url & "/data", [Headers=[Accept="application/json"]]) ),
+x= Binary.Buffer( Web.Contents(DataUrlWithQuery, [Headers=[Accept="application/json"]]) ),
 JSON = Json.Document(x),
     Order = JSON[format],
     Custom3 = Record.ToTable( JSON[dimension] ),
@@ -496,10 +499,11 @@ ISTAC.VariableFamiliesLevel4 = (x as table) =>
     #"Se expandió name.text" = Table.ExpandListColumn(#"Se expandió name", "name.text"),
     #"Se expandió name.text1" = Table.ExpandRecordColumn(#"Se expandió name.text", "name.text", {"value", "lang"}, {"name.text.value", "name.text.lang"}),
        #"Expanded variableElement" = Table.ExpandRecordColumn(#"Se expandió name.text1", "variableElement", {"id"}, {"variableElement.id"}),
-    #"Removed Other Columns" = Table.SelectColumns(#"Expanded variableElement",{"variableElement.id", "id", "name.text.value", "name.text.lang"})
+    #"Removed Other Columns" = Table.SelectColumns(#"Expanded variableElement",{"variableElement.id", "id", "name.text.value", "name.text.lang"}),
+     #"Renamed Columns" = Table.RenameColumns(#"Removed Other Columns",{{"variableElement.id", "Código elemento de variable"}, {"id", "Código"}, {"name.text.value", "Nombre"}, {"name.text.lang", "Idioma"}})
    
 in
-   try   #"Removed Other Columns" otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error");
+   try  #"Renamed Columns"  otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error");
 
 GetClasificaciones = ( url as text) as table =>
     ISTAC.VariableFamiliesLevel4( ISTAC.AlternatePagination(url &"/codes.json?fields=+variableElement", "code"  ) );
