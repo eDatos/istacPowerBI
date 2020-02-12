@@ -30,9 +30,9 @@ ISTAC.IndicatorNavTable = ()=>
       let
         objects = #table(
             {"Name",       "Key",        "Data",                           "ItemKind", "ItemName", "IsLeaf"},{
-            {"Indicadores",      "indicators",  ISTAC.Indicadores() , "Folder",    "Indicator",    false},
-            {"Sistemas de Indicadores", "SystemIndicators", ISTAC.SystemIndicators(), "Folder", "SystemIndicators", false},
-            {"URL del indicador / instancia de indicador", "GETIndicadores", ISTAC.GETIndicadores, "Function", "URL del indicador / instancia de indicador", true}
+            {"Por temas",      "indicators",  ISTAC.Indicadores() , "Folder",    "Por temas",    false},
+            {"Por sistemas de indicadores", "SystemIndicators", ISTAC.SystemIndicators(), "Folder", "Por sistemas de indicadores", false},
+            {"fx URL del indicador / instancia de indicador", "GETIndicadores", ISTAC.GETIndicadores, "Function", "fx URL del indicador / instancia de indicador", true}
            }),
         NavTable = Table.ToNavigationTable(objects, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf") 
     in
@@ -42,8 +42,8 @@ ISTAC.CubosNavTable = ()=>
       let
         objects = #table(
             {"Name",       "Key",        "Data",                           "ItemKind", "ItemName", "IsLeaf"},{
-            {"Cubos",      "Cubos",  ISTAC.SistemasEstadisticos (), "Folder",    "Cubos",    false},
-            {"URL del cubo / consulta de datos", "GETClasificaciones", ISTAC.GETDataset, "Function", "URL del cubo / consulta de datos", true}
+            {"Por operaciones estadísticas",      "Cubos",  ISTAC.SistemasEstadisticos (), "Folder",    "Por operaciones estadísticas",    false},
+            {"fx URL del cubo / consulta de datos", "GETClasificaciones", ISTAC.GETDataset, "Function", "fx URL del cubo / consulta de datos", true}
            }),
         NavTable = Table.ToNavigationTable(objects, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf") 
     in
@@ -53,8 +53,8 @@ ISTAC.ClasificacionesNavTable = ()=>
       let
         objects = #table(
             {"Name",       "Key",        "Data",                           "ItemKind", "ItemName", "IsLeaf"},{
-            {"Clasificaciones",      "Clasificaciones",  ISTAC.VariableFamilies() , "Folder",    "Indicator",    false},
-            {"URL de la clasificación", "GETClasificaciones", ISTAC.GetClasificaciones, "Function", "URL de la clasificación", true}
+            {"Por familias de variables",      "Clasificaciones",  ISTAC.VariableFamilies() , "Folder",    "Por familias de variables",    false},
+            {"fx URL de la clasificación", "GETClasificaciones", ISTAC.GetClasificaciones, "Function", "fx URL de la clasificación", true}
            }),
         NavTable = Table.ToNavigationTable(objects, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf") 
     in
@@ -459,7 +459,7 @@ let
     #"Duplicated Column" = Table.DuplicateColumn(#"Renamed Columns", "Name", "ItemName"),
     #"Added Custom1" = Table.AddColumn(#"Duplicated Column", "IsLeaf", each false),
     AddItemKind = Table.AddColumn( #"Added Custom1", "ItemKind", each "Folder"),
-    #"Added Custom" = Table.AddColumn(AddItemKind, "Custom", each try ISTAC.AlternatePagination("https://www3.gobiernodecanarias.org/istac/api/structural-resources/v1.0/codelists/~latest?query=VARIABLE_URN%20EQ%20%22urn%3Asiemac%3Aorg.siemac.metamac.infomodel.structuralresources.Variable%3D" & [Key] & "%22 ", "codelist") otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error")),
+    #"Added Custom" = Table.AddColumn(AddItemKind, "Custom", each try ISTAC.AlternatePagination("https://www3.gobiernodecanarias.org/istac/api/structural-resources/v1.0/codelists?query=VARIABLE_URN%20EQ%20%22urn%3Asiemac%3Aorg.siemac.metamac.infomodel.structuralresources.Variable%3D" & [Key] & "%22 ", "codelist") otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error")),
     #"Added Custom2" = Table.AddColumn(#"Added Custom", "Data", each ISTAC.VariableFamiliesLevel3([Custom])),
     #"Removed Other Columns" = Table.SelectColumns(#"Added Custom2",{"Key", "Name", "ItemName", "IsLeaf", "ItemKind", "Data"}),
    RemoveLabels = Table.ReplaceValue(  #"Removed Other Columns" ,"Variable ","",Replacer.ReplaceText,{"Name"}),
