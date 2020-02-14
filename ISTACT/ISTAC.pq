@@ -6,11 +6,11 @@ shared ISTAC.Contents =  Value.ReplaceType(Navigation, NavigationType);
 
 NavigationType = type function () as table meta [                  
         Documentation.Name = "ISTAC – Datos y metadatos",
-        Documentation.LongDescription = "Returns a table with key data from the ISTAC Data API",
+        Documentation.LongDescription = "Devuelve una tabla con datos clave de la API de datos ISTAC",
         Documentation.Examples = {[
-            Description = "Returns a table with key data from the ISTAC Data API",
+            Description = "Devuelve una tabla con datos clave de la API de datos ISTAC",
             Code = "ISTAC.Contents () ",
-            Result = "A table with key ISTAC Data API data"
+            Result = "Una tabla con datos clave de la API de datos ISTAC"
         ]}
     ];
 
