@@ -212,9 +212,15 @@ let
     Mergeperiod = Table.AddColumn( #"Changed Type with Locale" , "Fecha", each fxTextToDate([TIME_PERIOD.granularity], [TIME_PERIOD.code])),
     Choose = if List.Contains( Table.ColumnNames( #"Changed Type with Locale"), "TIME_PERIOD.code") then Mergeperiod else    #"Changed Type with Locale",
     AddDatsetID = Table.AddColumn(Choose, "DatasetID", each DatasetID, type text),
-    AddDatasetName = Table.AddColumn(AddDatsetID, "DatasetName", each DatasetName, type text)
+    AddDatasetName = Table.AddColumn(AddDatsetID, "DatasetName", each DatasetName, type text),
+    GrabColumnNames = Table.ColumnNames(AddDatasetName),
+    ChangeName = List.Transform( GrabColumnNames, each Text.Replace(_, ".Name", ".Código")),
+    ChangeLabel = List.Transform(ChangeName, each Text.Replace(_, ".label", ".Nombre")),
+    ChangeGranularity = List.Transform(ChangeLabel, each Text.Replace(_, ".granularity", ".Granularidad")),
+    ChangeCode = List.Transform(ChangeGranularity, each Text.Replace(_, ".code", ".Código")),
+    RenameColumnsLast = Table.RenameColumns( AddDatasetName, List.Zip({GrabColumnNames,ChangeCode}) )
 in
-    AddDatasetName;
+    RenameColumnsLast;
 
 Table.Paste = (table1, table2) => let id1 = Text.NewGuid(), id2 = Text.NewGuid() in
         Table.RemoveColumns(
@@ -367,9 +373,15 @@ JSON = Json.Document(x),
     AddPeriod =  Table.AddColumn( #"Replaced Errors", "Fecha" , each fxTextToDate([TIME.granularity],[TIME.Name]), type date),
     Choose = if List.Contains( Order, "TIME") then AddPeriod else #"Replaced Errors",
     AddTitle = Table.AddColumn(Choose, "Nombre de Indicador", each Metadata[Title], type text),
-    AddCode = Table.AddColumn(AddTitle, "Código de Indicador", each Metadata[code], type text)
+    AddCode = Table.AddColumn(AddTitle, "Código de Indicador", each Metadata[code], type text), 
+    GrabColumnNames = Table.ColumnNames(AddCode),
+    ChangeName = List.Transform( GrabColumnNames, each Text.Replace(_, ".Name", ".Código")),
+    ChangeLabel = List.Transform(ChangeName, each Text.Replace(_, ".label", ".Nombre")),
+    ChangeGranularity = List.Transform(ChangeLabel, each Text.Replace(_, ".granularity", ".Granularidad")),
+    ChangeCode = List.Transform(ChangeGranularity, each Text.Replace(_, ".code", ".Código")),
+    RenameColumnsLast = Table.RenameColumns( AddCode, List.Zip({GrabColumnNames,ChangeCode}) )
 in
-    AddCode;
+    RenameColumnsLast;
 
 Indicadores.Metadata = (url as text) as record =>
     let 
@@ -506,15 +518,17 @@ try ToNavTable otherwise error Error.Record("Sin información", "Esta variable n
 
 ISTAC.VariableFamiliesLevel4 = (x as table) =>
     let
-            #"Se expandió name" = Table.ExpandRecordColumn(x, "name", {"text"}, {"name.text"}),
+    #"Se expandió name" = Table.ExpandRecordColumn(x, "name", {"text"}, {"name.text"}),
     #"Se expandió name.text" = Table.ExpandListColumn(#"Se expandió name", "name.text"),
     #"Se expandió name.text1" = Table.ExpandRecordColumn(#"Se expandió name.text", "name.text", {"value", "lang"}, {"name.text.value", "name.text.lang"}),
-       #"Expanded variableElement" = Table.ExpandRecordColumn(#"Se expandió name.text1", "variableElement", {"id"}, {"variableElement.id"}),
+    RenameValues = Table.RenameColumns( #"Se expandió name.text1",{{"id", "Código"}, {"name.text.value", "Nombre"}, {"name.text.lang", "Idioma"}}),
+    #"Expanded variableElement" = Table.ExpandRecordColumn(RenameValues, "variableElement", {"id"}, {"variableElement.id"}),
     #"Removed Other Columns" = Table.SelectColumns(#"Expanded variableElement",{"variableElement.id", "id", "name.text.value", "name.text.lang"}),
-     #"Renamed Columns" = Table.RenameColumns(#"Removed Other Columns",{{"variableElement.id", "Código elemento de variable"}, {"id", "Código"}, {"name.text.value", "Nombre"}, {"name.text.lang", "Idioma"}})
+    #"Renamed Columns" = Table.RenameColumns(#"Removed Other Columns",{{"variableElement.id", "Código elemento de variable"}, {"id", "Código"}, {"name.text.value", "Nombre"}, {"name.text.lang", "Idioma"}}),
+    Choose = try  #"Renamed Columns" otherwise Table.SelectColumns(RenameValues,{"Código", "Nombre", "Idioma"})
    
 in
-   try  #"Renamed Columns"  otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error");
+   try  Choose  otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error");
 
 GetClasificaciones = ( url as text) as table =>
     ISTAC.VariableFamiliesLevel4( ISTAC.AlternatePagination(url &"/codes.json?fields=+variableElement", "code"  ) );
