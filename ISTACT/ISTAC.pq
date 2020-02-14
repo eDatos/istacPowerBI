@@ -241,7 +241,7 @@ let
     #"Expanded {0}" = Table.ExpandRecordColumn(Custom1, "dimensionValues", {"value"}, {"value"}),
     #"Expanded {0}1" = Table.ExpandListColumn(#"Expanded {0}", "value"),
     #"Removed Columns2" = Table.RemoveColumns(#"Expanded {0}1",{"name"}),
-    #"Added Custom4" = Table.AddColumn(#"Removed Columns2", "Personalizado", each if [id] = "TIME_PERIOD" then CubeTimeGranularities([value]) else if [id] = "MEDIDAS" then CubeMeasureGranularities([value]) else if [id]= "TERRITORIO" then CubeTerritorioGranularities([value]) else null),
+    #"Added Custom4" = Table.AddColumn(#"Removed Columns2", "Personalizado", each if [id] = "TIME_PERIOD" then CubeTimeGranularities([value]) else if [id] = "MEDIDAS" then CubeMeasureGranularities([value]) else if [id]= "TERRITORIO" then CubeTerritorioGranularities([value]) else CubeGenericNoGranularities([value])),
     #"Removed Columns3" = Table.RemoveColumns(#"Added Custom4",{"value"}),
     #"Expanded {0}2" = Table.ExpandTableColumn(#"Removed Columns3", "Personalizado", {"id", "value", "Granularity"}, {"id.1", "value.1", "Granularity"}),
     #"Renamed Columns2" = Table.RenameColumns(#"Expanded {0}2",{{"id.1", "code"}, {"value.1", "value"}})
@@ -287,6 +287,17 @@ let
 in
     #"Renamed Columns";
 
+CubeGenericNoGranularities = (x as record) as table =>
+let
+     value1 = Table.FromRecords( { x}),
+    #"Expanded name" = Table.ExpandRecordColumn(value1, "name", {"text"}, {"name.text"}),
+    #"Expanded name.text" = Table.ExpandListColumn(#"Expanded name", "name.text"),
+    #"Expanded name.text1" = Table.ExpandRecordColumn(#"Expanded name.text", "name.text", {"value", "lang"}, {"name.text.value", "name.text.lang"}),
+    #"Filtered Rows" = Table.SelectRows(#"Expanded name.text1", each [name.text.lang] = "es"),
+    #"Removed Other Columns" = Table.SelectColumns(#"Filtered Rows",{"name.text.value", "id"}),
+    #"Renamed Columns" = Table.RenameColumns(#"Removed Other Columns",{{"name.text.value", "value"}})
+in
+    #"Renamed Columns";
 
 CubeDimensions = (x as record, y as table) as table =>
 let
@@ -309,7 +320,7 @@ let
     Order = List.Zip({List.Transform(dimension[dimensionId], each _&".index"),  List.Repeat( {Order.Ascending }, List.Count(dimension[dimensionId]))}),
     Output = Table.Sort(Custom3, Order),
     Custom4 = Table.RemoveColumns( Output, List.Transform(dimension[dimensionId], each _&".index" )),
-    ColumnsSelect = List.Select( Table.ColumnNames(Custom4), each  Text.Contains(_, ".label") or Text.Contains(_, ".granularity")),
+    ColumnsSelect = List.Select( Table.ColumnNames(Custom4), each  Text.Contains(_, ".granularity")),
     ColumnsToDelete =  List.Select(ColumnsSelect, each not (Text.Contains(_, "TIME_PERIOD") or Text.Contains(_, "TERRITORIO") or Text.Contains(_, "MEDIDAS.label") ) ),
     RemoveColumns = Table.RemoveColumns( Custom4, ColumnsToDelete)
 in
