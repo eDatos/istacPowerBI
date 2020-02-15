@@ -148,10 +148,12 @@ Source = List.Generate( ()=>
 [JsonFile = Json.Document(  Web.Contents(url,[Headers=[Accept="application/json"]]) ), nextPage = JsonFile[nextLink]? ],
 each [JsonFile] <> null, 
 each [JsonFile = try Json.Document( Web.Contents([nextPage],[Headers=[Accept="application/json"]])) otherwise null , nextPage =try Record.Field(JsonFile, "nextLink") otherwise null  ],
-each Record.Field([JsonFile], selector )),
-    Custom1 = Table.FromRecords(  List.Combine( Source ), null, MissingField.UseNull)
+each Record.Field([JsonFile], selector) ),
+    Custom1 = List.Combine(Source),
+    Custom2 = List.Transform( Custom1, each Table.FromRecords({_}) ),
+    Custom3 = Table.Combine(Custom2)
 in
-    Custom1;
+    Custom3;
 
 ISTAC.SistemasEstadisticos = () =>
     let
@@ -517,7 +519,7 @@ ISTAC.VariableFamiliesLevel3 = (x as table) =>
     #"Expanded text1" = Table.ExpandRecordColumn(#"Expanded text", "text", {"value", "lang"}, {"value", "lang"}),
     #"Filtered Rows" = Table.SelectRows(#"Expanded text1", each ([lang] = "es")),
     #"Expanded selfLink" = Table.ExpandRecordColumn(#"Filtered Rows", "selfLink", {"kind", "href"}, {"kind.1", "href"}),
-    #"Added Custom" = Table.AddColumn(#"Expanded selfLink", "Data", each ISTAC.VariableFamiliesLevel4( ISTAC.AlternatePagination([href] &"/codes.json?fields=+variableElement", "code"  ) )),
+    #"Added Custom" = Table.AddColumn(#"Expanded selfLink", "Data", each ISTAC.VariableFamiliesLevel4( ISTAC.AlternatePagination([href] &"/codes.json?fields=+variableElement,parent", "code"  ) )),
     #"Removed Other Columns" = Table.SelectColumns(#"Added Custom",{"urn", "value", "Data"}),
     TranformUrn =  Table.TransformColumns( #"Removed Other Columns", {{"urn", each Text.Split(_, "="){1}}}),
     #"Renamed Columns" = Table.RenameColumns(TranformUrn,{{"value", "Name1"}, {"urn", "Key"}}),
