@@ -208,11 +208,11 @@ let
     ValuesColumn = CubeValuesAsTable(Source),
     DimensionColumns = CubeDimensions(Source, Metadata),
     Custom1 = Table.Paste(DimensionColumns,ValuesColumn),
-    #"Changed Type with Locale" = Table.TransformColumnTypes(Custom1, {{"Values", type number}}, "en-US"),
-    Mergeperiod = Table.AddColumn( #"Changed Type with Locale" , "Fecha", each fxTextToDate([TIME_PERIOD.granularity], [TIME_PERIOD.code])),
-    Choose = if List.Contains( Table.ColumnNames( #"Changed Type with Locale"), "TIME_PERIOD.code") then Mergeperiod else    #"Changed Type with Locale",
+    #"Changed Type with Locale" = Table.TransformColumnTypes(Custom1, {{"Valor", type number}}, "en-US"),
+    Mergeperiod = Table.AddColumn( #"Changed Type with Locale" , "Fecha", each fxTextToDate([Periodo.granularity], [Periodo.code])),
+    Choose = if List.Contains( Table.ColumnNames( #"Changed Type with Locale"), "Periodo.code") then Mergeperiod else    #"Changed Type with Locale",
     AddDatsetID = Table.AddColumn(Choose, "DatasetID", each DatasetID, type text),
-    AddDatasetName = Table.AddColumn(AddDatsetID, "DatasetName", each DatasetName, type text),
+    AddDatasetName = Table.AddColumn(AddDatsetID, "Nombre de Dataset", each DatasetName, type text),
     GrabColumnNames = Table.ColumnNames(AddDatasetName),
     ChangeName = List.Transform( GrabColumnNames, each Text.Replace(_, ".Name", ".Código")),
     ChangeLabel = List.Transform(ChangeName, each Text.Replace(_, ".label", ".Nombre")),
@@ -234,7 +234,7 @@ let
     ValuesList = x[data],
     Values= Text.Split( ValuesList [observations], "|"), 
     Source = Table.FromList( Values, Splitter.SplitByNothing()),
-    #"Renamed Columns" = Table.RenameColumns(Source,{{"Column1", "Values"}})
+    #"Renamed Columns" = Table.RenameColumns(Source,{{"Column1", "Valor"}})
 in
     #"Renamed Columns";
 
