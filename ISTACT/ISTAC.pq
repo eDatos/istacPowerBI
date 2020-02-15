@@ -537,17 +537,20 @@ try ToNavTable otherwise error Error.Record("Sin información", "Esta variable n
 ISTAC.VariableFamiliesLevel4 = (x as table) =>
     let
     RenameParent = try Table.RenameColumns(x,{{"parent", "Padre"}}) otherwise x,
-    Check1 = List.Contains(Table.ColumnNames(RenameParent), "Padre"),
+    #"Merged Queries" = Table.NestedJoin(RenameParent, {"Padre"}, RenameParent, {"urn"}, "RenameParent", JoinKind.LeftOuter),
+    #"Removed Columns2" = Table.RemoveColumns(#"Merged Queries",{"Padre"}),
+    #"Expanded RenameParent" = Table.ExpandTableColumn(#"Removed Columns2", "RenameParent", {"id"}, {"RenameParent.id"}),
+    #"Renamed Columns2" = Table.RenameColumns(#"Expanded RenameParent",{{"RenameParent.id", "Padre"}}),
+    Check1 = List.Contains(Table.ColumnNames(#"Renamed Columns2"), "Padre"),
     ColumnNames1 = if Check1 then {"Código", "Nombre","Idioma", "Padre"} else {"Código", "Nombre","Idioma"},
     ColumnNames2 = if Check1 then {"Código elemento de variable","Código", "Nombre","Idioma", "Padre"} else {"Código elemento de variable","Código", "Nombre","Idioma"},
-    #"Se expandió name" = Table.ExpandRecordColumn(RenameParent, "name", {"text"}, {"name.text"}),
+    #"Se expandió name" = Table.ExpandRecordColumn(if Check1 then #"Renamed Columns2" else x, "name", {"text"}, {"name.text"}),
     #"Se expandió name.text" = Table.ExpandListColumn(#"Se expandió name", "name.text"),
     #"Se expandió name.text1" = Table.ExpandRecordColumn(#"Se expandió name.text", "name.text", {"value", "lang"}, {"name.text.value", "name.text.lang"}),
     RenameValues = Table.RenameColumns( #"Se expandió name.text1",{{"id", "Código"}, {"name.text.value", "Nombre"}, {"name.text.lang", "Idioma"}}),
     #"Expanded variableElement" = Table.ExpandRecordColumn(RenameValues, "variableElement", {"id"}, {"variableElement.id"}),
     #"Renamed Columns" = Table.RenameColumns(#"Expanded variableElement",{{"variableElement.id", "Código elemento de variable"}}),
     Choose = try Table.SelectColumns( #"Renamed Columns", ColumnNames2) otherwise Table.SelectColumns(RenameValues,ColumnNames1)
-   
 in
    try  Choose  otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error");
 
