@@ -307,30 +307,46 @@ in
 
 CubeDimensions = (x as record, y as table) as table =>
 let
-    Source = x[data],
+  Source = x[data],
+  ColumnNames = CubeLabels(x),
     dimensions = Source[dimensions],
     dimension = Table.FromRecords( dimensions[dimension]),
     #"Expanded representations" = Table.ExpandRecordColumn(dimension, "representations", {"representation"}, {"representations.representation"}),
     Custom1 = Table.TransformColumns( #"Expanded representations", {{"representations.representation", Table.FromRecords }}),
     #"Transposed Table" = Table.Transpose(Custom1),
     #"Promoted Headers" = Table.PromoteHeaders(#"Transposed Table", [PromoteAllScalars=true]),
-    #"Expanded TERRITORIO" = List.Accumulate( dimension[dimensionId] , 
- #"Promoted Headers",
+    Custom5 = Table.RenameColumns( #"Promoted Headers", ColumnNames),
+    #"Expanded TERRITORIO" = List.Accumulate( List.Transform(ColumnNames, each _{1}) , 
+ Custom5,
 (state, column) => Table.ExpandTableColumn(state, column, {"code", "index"}, List.Transform({"code", "index"}, each Text.Combine({column,".", _ } ) )   )),
-    Custom2 = List.Accumulate( dimension[dimensionId], 
+    Custom2 = List.Accumulate( ColumnNames, 
  #"Expanded TERRITORIO",
-(state, column) => Table.NestedJoin(state, {column&".code"}, Table.SelectRows( y, each [id]= column), {"code"}, column&".value" )),
-    Custom3 =List.Accumulate( dimension[dimensionId] , 
+(state, column) => Table.NestedJoin(state, {column{1}&".code"}, Table.SelectRows( y, each [id]= column{0}), {"code"}, column{1}&".value" )),
+    Custom3 =List.Accumulate( List.Transform(ColumnNames, each _{1}) , 
  Custom2,
 (state, column) => Table.ExpandTableColumn(state, column&".value", {"value", "Granularity"}, {column&".label", column&".granularity"}   )),
-    Order = List.Zip({List.Transform(dimension[dimensionId], each _&".index"),  List.Repeat( {Order.Ascending }, List.Count(dimension[dimensionId]))}),
+    Order = List.Zip({List.Transform(List.Transform(ColumnNames, each _{1}), each _&".index"),  List.Repeat( {Order.Ascending }, List.Count(dimension[dimensionId]))}),
     Output = Table.Sort(Custom3, Order),
-    Custom4 = Table.RemoveColumns( Output, List.Transform(dimension[dimensionId], each _&".index" )),
+    Custom4 = Table.RemoveColumns( Output, List.Transform(List.Transform(ColumnNames, each _{1}), each _&".index" )),
     ColumnsSelect = List.Select( Table.ColumnNames(Custom4), each  Text.Contains(_, ".granularity")),
-    ColumnsToDelete =  List.Select(ColumnsSelect, each not (Text.Contains(_, "TIME_PERIOD") or Text.Contains(_, "TERRITORIO") or Text.Contains(_, "MEDIDAS.label") ) ),
+    ColumnsToDelete =  List.Select(ColumnsSelect, each not (Text.Contains(_, "Periodo") or Text.Contains(_, "Territorio") ) ),
     RemoveColumns = Table.RemoveColumns( Custom4, ColumnsToDelete)
 in
     RemoveColumns;
+
+CubeLabels = (x as record) =>
+let
+    metadata = x[metadata],
+    dimensions = metadata[dimensions],
+    dimension = Table.FromRecords( dimensions[dimension] ),
+    #"Expanded name" = Table.ExpandRecordColumn(dimension, "name", {"text"}, {"name.text"}),
+    #"Expanded name.text" = Table.ExpandListColumn(#"Expanded name", "name.text"),
+    #"Expanded name.text1" = Table.ExpandRecordColumn(#"Expanded name.text", "name.text", {"value", "lang"}, {"value", "lang"}),
+    #"Filtered Rows" = Table.SelectRows(#"Expanded name.text1", each ([lang] = "es")),
+    #"Removed Other Columns" = Table.SelectColumns(#"Filtered Rows",{"id", "value"}),
+    Custom1 = List.Zip( Table.ToColumns( #"Removed Other Columns"))
+in
+    Custom1;
 
 TransformBinary.Indicadores= (url as text) as table =>
 let
