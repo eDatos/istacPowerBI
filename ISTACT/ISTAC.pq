@@ -536,12 +536,12 @@ try ToNavTable otherwise error Error.Record("Sin información", "Esta variable n
 
 ISTAC.VariableFamiliesLevel4 = (x as table) =>
     let
-    RenameParent = try Table.RenameColumns(x,{{"parent", "Padre"}}) otherwise x,
+    RenameParent = Table.RenameColumns(x,{{"parent", "Padre"}}),
     #"Merged Queries" = Table.NestedJoin(RenameParent, {"Padre"}, RenameParent, {"urn"}, "RenameParent", JoinKind.LeftOuter),
     #"Removed Columns2" = Table.RemoveColumns(#"Merged Queries",{"Padre"}),
     #"Expanded RenameParent" = Table.ExpandTableColumn(#"Removed Columns2", "RenameParent", {"id"}, {"RenameParent.id"}),
     #"Renamed Columns2" = Table.RenameColumns(#"Expanded RenameParent",{{"RenameParent.id", "Padre"}}),
-    Check1 = List.Contains(Table.ColumnNames(#"Renamed Columns2"), "Padre"),
+    Check1 = try List.Contains(Table.ColumnNames(#"Renamed Columns2"), "Padre") otherwise false,
     ColumnNames1 = if Check1 then {"Código", "Nombre","Idioma", "Padre"} else {"Código", "Nombre","Idioma"},
     ColumnNames2 = if Check1 then {"Código elemento de variable","Código", "Nombre","Idioma", "Padre"} else {"Código elemento de variable","Código", "Nombre","Idioma"},
     #"Se expandió name" = Table.ExpandRecordColumn(if Check1 then #"Renamed Columns2" else x, "name", {"text"}, {"name.text"}),
@@ -555,7 +555,7 @@ in
    try  Choose  otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error");
 
 GetClasificaciones = ( url as text) as table =>
-    ISTAC.VariableFamiliesLevel4( ISTAC.AlternatePagination(url &"/codes.json?fields=+variableElement", "code"  ) );
+    ISTAC.VariableFamiliesLevel4( ISTAC.AlternatePagination(url &"/codes.json?fields=+variableElement,parent", "code"  ) );
 
 ISTAC = [
      TestConnection = (dataSourcePath) => { "ISTAC.Contents" },
