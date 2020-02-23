@@ -4,6 +4,7 @@ section ISTAC;
 [DataSource.Kind="ISTAC", Publish="ISTAC.Publish"]
 shared ISTAC.Contents =  Value.ReplaceType(Navigation, NavigationType);
 
+// Metadatos para la función ISTAC.Contents
 NavigationType = type function () as table meta [                  
         Documentation.Name = "ISTAC – Datos y metadatos",
         Documentation.LongDescription = "Devuelve una tabla con datos clave de la API de datos ISTAC",
@@ -14,11 +15,12 @@ NavigationType = type function () as table meta [
         ]}
     ];
 
+// Nivel superior de la tabla de navegación del conector
  Navigation = () =>
     let
         objects = #table(
             {"Name",       "Key",        "Data",                           "ItemKind", "ItemName", "IsLeaf"},{
-            {"Indicadores",      "indicators",  ISTAC.IndicatorNavTable() , "Folder",    "Indicator",    false},
+            {"Indicadores",      "indicators",  ISTAC.IndicatorNavTable() , "Folder",    "Indicator",    false}, 
             {"Cubos",      "Cubos",  ISTAC.CubosNavTable (), "Folder",    "Cubos",    false},
             {"Clasificaciones",      "Clasificaciones",  ISTAC.ClasificacionesNavTable(), "Folder",    "Clasificaciones",    false}
             }),
@@ -26,6 +28,7 @@ NavigationType = type function () as table meta [
     in
         NavTable;
 
+// Navegación específica para Indicadores
 ISTAC.IndicatorNavTable = ()=> 
       let
         objects = #table(
@@ -38,6 +41,7 @@ ISTAC.IndicatorNavTable = ()=>
     in
         NavTable;
 
+// Navegación específica para Cubos
 ISTAC.CubosNavTable = ()=> 
       let
         objects = #table(
@@ -49,19 +53,22 @@ ISTAC.CubosNavTable = ()=>
     in
         NavTable;
 
+// Navegación específica para Clasificaciones
 ISTAC.ClasificacionesNavTable = ()=> 
       let
         objects = #table(
             {"Name",       "Key",        "Data",                           "ItemKind", "ItemName", "IsLeaf"},{
             {"Por familias de variables",      "Clasificaciones",  ISTAC.VariableFamilies() , "Folder",    "Por familias de variables",    false},
-            {"fx URL de la clasificación", "GETClasificaciones", ISTAC.GetClasificaciones, "Function", "fx URL de la clasificación", true}
+            {"fx URL de la clasificación", "GETClasificaciones", ISTAC.GETClasificaciones, "Function", "fx URL de la clasificación", true}
            }),
         NavTable = Table.ToNavigationTable(objects, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf") 
     in
         NavTable;
 
+// Función que se encarga de obtener los datos de cubos a partir de una url
 ISTAC.GETDataset = Value.ReplaceType(ISTAC.Dataset, fxCubosType);
 
+// Metadatos para función ISTAC.GETDataset
 fxCubosType = type function (
 url as (type text meta [
         Documentation.FieldCaption = "url",
@@ -76,8 +83,9 @@ url as (type text meta [
         ]}
     ];
 
-ISTAC.GetClasificaciones = Value.ReplaceType(GetClasificaciones, fxClasificacionesType);
+ISTAC.GETClasificaciones = Value.ReplaceType(GetClasificaciones, fxClasificacionesType);
 
+// Metadatos para función ISTAC.GETClasificaciones
 fxClasificacionesType = type function (
 url as (type text meta [
         Documentation.FieldCaption = "url",
@@ -92,8 +100,10 @@ url as (type text meta [
         ]}
     ];
 
+// Función que se encarga de obtener los datos de indicadores y sistemas de indicadores a partir de una url
 ISTAC.GETIndicadores = Value.ReplaceType(TransformBinary.Indicadores, fxIndicadoresType);    
 
+// Metadatos para función ISTAC.GETIndicadores
 fxIndicadoresType = type function (
 url as (type text meta [
         Documentation.FieldCaption = "url",
@@ -108,6 +118,8 @@ url as (type text meta [
 
         ]}
     ];
+
+// Tabla de navegación para carpetas y tablas de indicadores
 ISTAC.Indicadores = () as table =>
  let
      Source = ISTAC.AlternatePagination("https://www3.gobiernodecanarias.org/istac/api/indicators/v1.0/indicators?limit=1000", "items"),
@@ -131,6 +143,7 @@ ISTAC.Indicadores = () as table =>
 in
      ToNavTable ;
 
+// Función que crea el formato final para las tablas de indicadores
 IndicatorSubTables = (x as table) => 
     let
            #"Renamed Columns" = Table.RenameColumns(x,{{"id", "Key"}, {"title.__default__", "Name"}}),
@@ -142,6 +155,7 @@ IndicatorSubTables = (x as table) =>
     in 
         ToNavTable;
 
+// Función alterna creada para la paginación de diversas llamadas al API
 ISTAC.AlternatePagination = (url as text, selector as text ) as table =>
 let
 Source = List.Generate( ()=> 
@@ -155,6 +169,7 @@ each Record.Field([JsonFile], selector) ),
 in
     Custom3;
 
+// Tabla de navegación para carpetas y tablas de Sistemas de indicadores
 ISTAC.SistemasEstadisticos = () =>
     let
     Source = ISTAC.AlternatePagination("https://www3.gobiernodecanarias.org/istac/api/operations/v1.0/operations?limit=1000", "operation"),
@@ -176,7 +191,7 @@ ISTAC.SistemasEstadisticos = () =>
 in
   ToNavTable;
 
-
+// Tabla de navegación para carpetas y tablas de Cubos
 ISTAC.Cubos = (url as text)=>
    let
     Source = ISTAC.AlternatePagination(url,"dataset"),
@@ -200,6 +215,7 @@ ISTAC.Cubos = (url as text)=>
 in
   ToNavTable;
 
+// Función que se encarga de crear la tabla final para cualquier Dataset a partir de una url
 ISTAC.Dataset = (url as text) as table =>
 let
   x = Binary.Buffer( Web.Contents(url , [Headers=[Accept="application/json"]]) ),
@@ -224,6 +240,7 @@ let
 in
     RenameColumnsLast;
 
+// Función de ayuda para fusionar dos tablas que tienen la misma cantidad de filas
 Table.Paste = (table1, table2) => let id1 = Text.NewGuid(), id2 = Text.NewGuid() in
         Table.RemoveColumns(
             Table.Join(Table.AddIndexColumn(table1, id1), id1, 
@@ -231,6 +248,7 @@ Table.Paste = (table1, table2) => let id1 = Text.NewGuid(), id2 = Text.NewGuid()
                        JoinKind.FullOuter, JoinAlgorithm.SortMerge),
             {id1, id2});
 
+// Función de ayuda para transformar un registro que contiene los valores de observaciones a una tabla
 CubeValuesAsTable = (x as record) as table =>
 let
     ValuesList = x[data],
@@ -240,6 +258,7 @@ let
 in
     #"Renamed Columns";
 
+// Función de ayuda para extraer los metadatos de un cubo que provienen de un registro 
  CubeMetadata = (x as record) as table => 
 let
     metadata = x[metadata],
@@ -256,6 +275,7 @@ let
 in
     #"Renamed Columns2";
 
+// Función de ayuda para extraer los datos de granularidades de tiempo de un registro de cubo 
 CubeTimeGranularities = (x as record) as table =>
 let
     value1 = Table.FromRecords( {x}),
@@ -267,6 +287,8 @@ let
      RemoveLang = Table.RemoveColumns( #"Filtered Rows1", {"lang"})
 in
    RemoveLang;
+
+// Función de ayuda para extraer los datos de granularidades de medidas de un registro de cubo 
 CubeMeasureGranularities =  (x as record) =>
 let
     value1 = Table.FromRecords( {x} ),
@@ -278,6 +300,7 @@ let
 in
     #"Removed Other Columns";
 
+// Función de ayuda para extraer los datos de granularidades de territorios de un registro de cubo 
 CubeTerritorioGranularities = (x as record) =>
 let
     value = Table.FromRecords( {x} ),
@@ -295,6 +318,7 @@ let
 in
     #"Renamed Columns";
 
+// Función de ayuda para extraer los datos de granularidades que no sean de tiempo, medidas o territorios a partir de un registro de cubo
 CubeGenericNoGranularities = (x as record) as table =>
 let
      value1 = Table.FromRecords( { x}),
@@ -307,6 +331,7 @@ let
 in
     #"Renamed Columns";
 
+// Función de ayuda para extraer los datos de dimensiones de un registro de cubo 
 CubeDimensions = (x as record, y as table) as table =>
 let
   Source = x[data],
@@ -336,6 +361,7 @@ let
 in
     RemoveColumns;
 
+// Función de ayuda para extraer los datos de etiquetadas de un registro de cubo 
 CubeLabels = (x as record) =>
 let
     metadata = x[metadata],
@@ -350,6 +376,7 @@ let
 in
     Custom1;
 
+// Función que se encarga de crear la tabla final para cualquier indicador o sistemas de indicadores a partir de una url
 TransformBinary.Indicadores= (url as text) as table =>
 let
     MainUrlByParts = Uri.Parts( url ),
@@ -401,6 +428,7 @@ JSON = Json.Document(x),
 in
     RenameColumnsLast;
 
+// Función de ayuda para extraer los metadatos de un indicador o sistema de indicadores a partir de una url
 Indicadores.Metadata = (url as text) as record =>
     let 
     Custom1 = Json.Document(Web.Contents( url)),
@@ -420,6 +448,7 @@ Indicadores.Metadata = (url as text) as record =>
 in
     Custom3;
 
+// Tabla de navegación para carpetas y tablas de sistemas de indicadores
 ISTAC.SystemIndicators = () =>
     let
     Source = ISTAC.SystemIndicatorPagination("https://www.gobiernodecanarias.org/istac/api/indicators/v1.0/indicatorsSystems", 1000),
@@ -439,6 +468,8 @@ ISTAC.SystemIndicators = () =>
 in
     ToNavTable ;
 
+
+// Función que crea el formato final para las tablas de sistemas de indicadores
 ISTAC.SystemIndicatorSubLevel = (x as table) as table =>
 let
  #"Expanded title1" = Table.ExpandRecordColumn(x, "title", {"es", "__default__"}, {"title.es", "title.__default__"}),
@@ -452,6 +483,7 @@ let
 in
 ToNavTable;
 
+// Función creada específicamente para la paginación de sistemas de indicadores
 ISTAC.SystemIndicatorPagination = (url as text, myLimit as number) as table => 
 let
     Source = List.Generate( ()=>
@@ -469,6 +501,7 @@ each Table.FromRecords( Record.Field( [Call], "items" ), null, MissingField.UseN
 in
     Custom1;
 
+// Tabla de navegación para carpetas y tablas de Clasificaciones
 ISTAC.VariableFamilies = () as table =>
   let
    Source = ISTAC.AlternatePagination("https://www3.gobiernodecanarias.org/istac/api/structural-resources/v1.0/variablefamilies?limit=1000", "variableFamily"),
@@ -492,6 +525,7 @@ ISTAC.VariableFamilies = () as table =>
 in
 try ToNavTable otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error");
 
+// Función de ayuda que se encarga de crear el segundo nivel de la navegación de Clasificaciones
 ISTAC.VariableFamiliesLevel2 = (x as table) => 
 let
    #"Expanded name" = Table.ExpandRecordColumn(x, "name", {"text"}, {"text"}),
@@ -512,6 +546,7 @@ let
 in
 try ToNavTable otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error");
 
+// Función de ayuda que se encarga de crear el tercer nivel de la navegación de Clasificaciones
 ISTAC.VariableFamiliesLevel3 = (x as table) =>
    let
     #"Expanded name" = Table.ExpandRecordColumn(x, "name", {"text"}, {"text"}),
@@ -533,7 +568,7 @@ ISTAC.VariableFamiliesLevel3 = (x as table) =>
 in
 try ToNavTable otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error") ;
 
-
+// Función que se encarga de crear la tabla final para las Clasificaciones
 ISTAC.VariableFamiliesLevel4 = (x as table) =>
     let
     RenameParent = Table.RenameColumns(x,{{"parent", "Padre"}}),
@@ -554,6 +589,7 @@ ISTAC.VariableFamiliesLevel4 = (x as table) =>
 in
    try  Choose  otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error");
 
+// Función que se encarga de crear la tabla con datos de Clasificaciones a partir de una url
 GetClasificaciones = ( url as text) as table =>
     ISTAC.VariableFamiliesLevel4( ISTAC.AlternatePagination(url &"/codes.json?fields=+variableElement,parent", "code"  ) );
 
@@ -581,6 +617,7 @@ ISTAC.Icons = [
 ];
 
 
+/// Función de ayuda para crear la estructura de carpetas / jerarquías dentro de Power BI - código brindado por Microsoft
 Table.ToNavigationTable = (
     table as table,
     keyColumns as list,
@@ -603,9 +640,10 @@ Table.ToNavigationTable = (
         navigationTable = Value.ReplaceType(table, newTableType)
     in
         navigationTable;
-
+// Función que transforma una cadena de texto con código de fecha a nivel granular YEARLY a una nueva cadena de texto con formato YYYYMMDD
 fxYearly =  (x as text) as text => x & "0101";
 
+// Función que transforma una cadena de texto con código de fecha a nivel granular BIYEARLY a una nueva cadena de texto con formato YYYYMMDD
 fxBiYearly = (x as text) as text =>
 let
 GetRidOfDashes = Text.Replace(x, "-",""),
@@ -617,6 +655,7 @@ Output = Year&Month&"01"
 in
 Output;
 
+// Función que transforma una cadena de texto con código de fecha a nivel granular QUARTERLY a una nueva cadena de texto con formato YYYYMMDD
 fxQuarterly = (x as text) as text =>
 let
 GetRidOfDashes = Text.Replace(x, "-",""),
@@ -628,6 +667,7 @@ Output = Year&Month&"01"
 in
 Output;
 
+// Función que transforma una cadena de texto con código de fecha a nivel granular MONTHLY a una nueva cadena de texto con formato YYYYMMDD
 fxMonthly = (x as text) as text =>
 let
 GetRidOfDashes = Text.Replace(x, "-",""),
@@ -639,6 +679,7 @@ Output = Year&Month&"01"
 in
 Output;
 
+// Función que se encarga de transformar un texto codificado a una fecha
 fxTextToDate = (granularity as text, code as text) as date =>
     let
         FunctionSelect = if granularity = "YEARLY" then fxYearly(code) else if granularity = "BIYEARLY" then fxBiYearly(code) else if granularity = "QUARTERLY" then fxQuarterly(code) else if granularity = "DAILY" then code else if granularity = "MONTHLY" then fxMonthly(code) else null,
