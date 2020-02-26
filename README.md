@@ -8,6 +8,7 @@ conector PowerBI
  
 ## Para instalar el conector debes seguir los siguientes pasos:
 
+1.    Descargar el fichero ISTAC.mez del repositorio. 
 1.    Instalar Power BI Desktop (https://powerbi.microsoft.com/es-es/downloads/ )
 1.    Seguir los pasos para poder usar conectores no certificados: https://docs.microsoft.com/es-es/power-bi/desktop-connector-extensibility
 1.    Reiniciar Power BI Desktop tras habilitar los custom connectors
