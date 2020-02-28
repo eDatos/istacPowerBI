@@ -13,7 +13,9 @@
 1. Seguir los pasos para poder usar conectores no certificados: https://docs.microsoft.com/es-es/power-bi/desktop-connector-extensibility
 1. Reiniciar Power BI Desktop tras habilitar los custom connectors
 
-#### Estos tres pasos solo se deben de realizar la primera vez. Cuando el conector haya pasado por el proceso de certificación de Microsoft no será necesario proceder a la instalación. Para el acceso al conector deben seguir los siguientes pasos:
+#### Estos tres pasos solo se deben realizar la primera vez. Cuando el conector haya pasado por el proceso de certificación de Microsoft no será necesario proceder a la instalación. Para el acceso al conector se deben seguir los siguientes pasos:
 
 1. Desde el Power BI Desktop seleccionar la opción “Obtener Datos”.
 1. Ahí verás el conector (ISTAC – Datos y metadatos). Selecciona esa opción y haz clic en conectar. 
+
+![Logo interreg](http://www.gobiernodecanarias.org/istac/galerias/imagenes/mac/mac-interreg.png)
