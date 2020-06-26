@@ -22,7 +22,8 @@ NavigationType = type function () as table meta [
             {"Name",       "Key",        "Data",                           "ItemKind", "ItemName", "IsLeaf"},{
             {"Indicadores",      "indicators",  ISTAC.IndicatorNavTable() , "Folder",    "Indicator",    false}, 
             {"Cubos",      "Cubos",  ISTAC.CubosNavTable (), "Folder",    "Cubos",    false},
-            {"Clasificaciones",      "Clasificaciones",  ISTAC.ClasificacionesNavTable(), "Folder",    "Clasificaciones",    false}
+            {"Clasificaciones",      "Clasificaciones",  ISTAC.ClasificacionesNavTable(), "Folder",    "Clasificaciones",    false},
+            {"ISTAC.base", "ISTAC.base", ISTAC.base, "Function", "ISTAC.base", true}
             }),
         NavTable = Table.ToNavigationTable(objects, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf") 
     in
@@ -588,6 +589,32 @@ ISTAC.VariableFamiliesLevel4 = (x as table) =>
     Choose = try Table.SelectColumns( #"Renamed Columns", ColumnNames2) otherwise Table.SelectColumns(RenameValues,ColumnNames1)
 in
    try  Choose  otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error");
+
+
+// Nueva consulta para obtener datos del API de acceso a los datos de ISTAC.base
+ISTAC.base = (url as text) =>
+let
+    Source = Json.Document(Web.Contents(url)),
+    Keys = List.Transform(Source[categories], each [variable]),
+    Rows = List.Transform(Source[data], each [Valor=[Valor]] & Record.FromList([dimCodes], Keys)),
+    Data = Table.FromRecords(Rows),
+    Cleaned = Table.SelectRows(Data, each [Valor] <> "." and [Valor] <> ".."),
+    ChangedType = Table.TransformColumnTypes(Cleaned,{{"Valor", type number}}),
+    RemovedErrors = Table.RemoveRowsWithErrors(ChangedType, {"Valor"}),
+    WithLookups = List.Accumulate(
+        Source[categories],
+        RemovedErrors,
+        (t, v) => Table.Join(
+            t,
+            v[variable],
+            Table.FromColumns(
+                {v[codes], v[codes], v[labels]},
+                {v[variable], v[variable] & ".code", v[variable] & ".label"}),
+            v[variable])),
+    RemovedKeys = Table.RemoveColumns(WithLookups, Keys),
+    WithTitle = Table.AddColumn(RemovedKeys, "Title", each Source[title])
+in
+    WithTitle;
 
 // Función que se encarga de crear la tabla con datos de Clasificaciones a partir de una url
 GetClasificaciones = ( url as text) as table =>
