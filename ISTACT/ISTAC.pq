@@ -599,7 +599,7 @@ let
     Rows = List.Transform(Source[data], each [Valor=[Valor]] & Record.FromList([dimCodes], Keys)),
     Data = Table.FromRecords(Rows),
     Cleaned = Table.SelectRows(Data, each [Valor] <> "." and [Valor] <> ".."),
-    ChangedType = Table.TransformColumnTypes(Cleaned,{{"Valor", type number}}),
+    ChangedType = Table.TransformColumnTypes(Cleaned,{{"Valor", type number, "en-US"}}),
     RemovedErrors = Table.RemoveRowsWithErrors(ChangedType, {"Valor"}),
     WithLookups = List.Accumulate(
         Source[categories],
