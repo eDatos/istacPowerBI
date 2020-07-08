@@ -609,10 +609,10 @@ let
             v[variable],
             Table.FromColumns(
                 {v[codes], v[codes], v[labels]},
-                {v[variable], v[variable] & ".code", v[variable] & ".label"}),
+                {v[variable], v[variable] & ".Código", v[variable] & ".Nombre"}),
             v[variable])),
     RemovedKeys = Table.RemoveColumns(WithLookups, Keys),
-    WithTitle = Table.AddColumn(RemovedKeys, "Title", each Source[title])
+    WithTitle = Table.AddColumn(RemovedKeys, "Título", each Source[title])
 in
     WithTitle;
 
