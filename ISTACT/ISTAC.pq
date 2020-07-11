@@ -596,9 +596,10 @@ ISTAC.base = (url as text) =>
 let
     Source = Json.Document(Web.Contents(url)),
     Keys = List.Transform(Source[categories], each [variable]),
+    temporalDim= Source[temporals]{0} &".Código",
     Rows = List.Transform(Source[data], each [Valor=[Valor]] & Record.FromList([dimCodes], Keys)),
     Data = Table.FromRecords(Rows),
-    Cleaned = Table.SelectRows(Data, each [Valor] <> "." and [Valor] <> ".."),
+    Cleaned = Table.SelectRows(Data, each [Valor] <> "." and [Valor] <> ".." and [Valor] <> "..."),
     ChangedType = Table.TransformColumnTypes(Cleaned,{{"Valor", type number, "en-US"}}),
     RemovedErrors = Table.RemoveRowsWithErrors(ChangedType, {"Valor"}),
     WithLookups = List.Accumulate(
@@ -612,9 +613,10 @@ let
                 {v[variable], v[variable] & ".Código", v[variable] & ".Nombre"}),
             v[variable])),
     RemovedKeys = Table.RemoveColumns(WithLookups, Keys),
-    WithTitle = Table.AddColumn(RemovedKeys, "Título", each Source[title])
+    WithTitle = Table.AddColumn(RemovedKeys, "Título", each Source[title]),
+    #"Added Custom" = Table.AddColumn(WithTitle, "Fecha", each fxTextToDateBase( Record.Field(_, temporalDim) ), type date)
 in
-    WithTitle;
+    #"Added Custom";
 
 // Función que se encarga de crear la tabla con datos de Clasificaciones a partir de una url
 GetClasificaciones = ( url as text) as table =>
@@ -716,3 +718,32 @@ fxTextToDate = (granularity as text, code as text) as date =>
         ToDate = #date( Year, Month, Day)
         in
             ToDate;
+
+fxTextToDateBase = (code as text) => let
+        Source = code,
+        Year = Text.Start(Source, 4),
+        AfterYearPart = Text.End(Source, Text.Length(Source) - Text.Length(Year) ),
+        Granularity = if Text.Start(AfterYearPart,1) = "" then "Y" else if Text.Length( AfterYearPart) = 4 then "D" else Text.Start(AfterYearPart,1),
+        MonthXP = if Granularity = "Y" then 1 else 
+     if Granularity = "M" then Number.From(Text.End(AfterYearPart, Text.Length(AfterYearPart)-1)) else 
+     if Granularity = "Q" then (Number.From(Text.End(AfterYearPart, Text.Length(AfterYearPart)-1)) -1)  * 3 + 1 else 
+      if Granularity = "H" then (Number.From(Text.End(AfterYearPart, Text.Length(AfterYearPart)-1)) -1) * 6 + 1 else 
+       if Granularity = "W" then null else
+      Number.From(Text.Start(AfterYearPart,2) ),
+        DayXP = if Granularity = "Y" then 1 else 
+     if Granularity = "M" then 1 else 
+     if Granularity = "Q" then  1 else 
+      if Granularity = "H" then 1 else 
+      Number.From(Text.End(AfterYearPart,2) ),
+        CalculateDateFinal = if Granularity = "W" then Table.SelectRows( ISOData, each [Week Code]=Source)[Date]{0} else #date(Number.From(Year),MonthXP, DayXP),
+        AddedType = CalculateDateFinal as date
+    in
+        AddedType;
+
+ISOData =
+let
+    Source = Csv.Document(Extension.Contents("ISO Week.csv"),[Delimiter=",", Columns=4, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+    #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Week Number", Int64.Type}, {"ISO Year", Int64.Type}, {"Date", type date}, {"Week Code", type text}})
+in
+    #"Changed Type";
