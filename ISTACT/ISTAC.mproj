@@ -2,8 +2,7 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>
-    </ProjectGuid>
+    <ProjectGuid>{a98bda3d-a47f-4f6a-98b4-da978cda66cf}</ProjectGuid>
     <OutputType>Exe</OutputType>
     <RootNamespace>MyRootNamespace</RootNamespace>
     <AssemblyName>MyAssemblyName</AssemblyName>
@@ -66,6 +65,9 @@
     </Compile>
     <Compile Include="resources.resx">
       <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="ISO Week.csv">
+      <SubType>Content</SubType>
     </Compile>
     <Content Include="ISTAC.query.pq">
       <SubType>Code</SubType>
