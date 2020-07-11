@@ -614,9 +614,27 @@ let
             v[variable])),
     RemovedKeys = Table.RemoveColumns(WithLookups, Keys),
     WithTitle = Table.AddColumn(RemovedKeys, "Título", each Source[title]),
-    #"Added Custom" = Table.AddColumn(WithTitle, "Fecha", each fxTextToDateBase( Record.Field(_, temporalDim) ), type date)
+    #"Added Custom" = Table.AddColumn(WithTitle, "Year", each Text.Start(Record.Field(_, temporalDim), 4)),
+    #"Added Custom1" = Table.AddColumn(#"Added Custom", "AfterYearPart", each Text.End(Record.Field(_,temporalDim) , Text.Length(Record.Field(_,temporalDim)) - Text.Length([Year]) )),
+    #"Added Custom2" = Table.AddColumn(#"Added Custom1", "Granularity", each if Text.Start([AfterYearPart],1) = "" then "Y" else if Text.Length( [AfterYearPart]) = 4 then "D" else Text.Start([AfterYearPart],1)),
+    #"Merged Queries" = Table.NestedJoin(#"Added Custom2", {temporalDim}, ISOData, {"Week Code"}, "ISO Week", JoinKind.LeftOuter),
+    #"Expanded ISO Week" = Table.ExpandTableColumn(#"Merged Queries", "ISO Week", {"Date"}, {"Date"}),
+    #"Added Custom3" = Table.AddColumn(#"Expanded ISO Week", "Month", each if [Granularity] = "Y" then 1 else 
+     if [Granularity] = "M" then Number.From(Text.End([AfterYearPart], Text.Length([AfterYearPart])-1)) else 
+     if [Granularity] = "Q" then (Number.From(Text.End([AfterYearPart], Text.Length([AfterYearPart])-1)) -1)  * 3 + 1 else 
+      if [Granularity] = "H" then (Number.From(Text.End([AfterYearPart], Text.Length([AfterYearPart])-1)) -1) * 6 + 1 else 
+       if [Granularity] = "W" then null else
+      Number.From(Text.Start([AfterYearPart],2) )),
+    #"Added Custom4" = Table.AddColumn(#"Added Custom3", "Day", each if [Granularity] = "Y" then 1 else 
+     if [Granularity] = "M" then 1 else 
+     if [Granularity] = "Q" then  1 else 
+      if [Granularity] = "H" then 1 else 
+      Number.From(Text.End([AfterYearPart],2) )),
+    #"Added Custom5" = Table.AddColumn(#"Added Custom4", "Fecha", each if [Granularity] = "W" then [Date] else #date(Number.From([Year]),[Month], [Day])),
+    #"Removed Columns" = Table.RemoveColumns(#"Added Custom5",{"Year", "AfterYearPart", "Granularity", "Date", "Month", "Day"}),
+    #"Changed Type" = Table.TransformColumnTypes(#"Removed Columns",{{"Fecha", type date}, {"Título", type text}})
 in
-    #"Added Custom";
+   #"Changed Type";
 
 // Función que se encarga de crear la tabla con datos de Clasificaciones a partir de una url
 GetClasificaciones = ( url as text) as table =>
@@ -719,26 +737,6 @@ fxTextToDate = (granularity as text, code as text) as date =>
         in
             ToDate;
 
-fxTextToDateBase = (code as text) => let
-        Source = code,
-        Year = Text.Start(Source, 4),
-        AfterYearPart = Text.End(Source, Text.Length(Source) - Text.Length(Year) ),
-        Granularity = if Text.Start(AfterYearPart,1) = "" then "Y" else if Text.Length( AfterYearPart) = 4 then "D" else Text.Start(AfterYearPart,1),
-        MonthXP = if Granularity = "Y" then 1 else 
-     if Granularity = "M" then Number.From(Text.End(AfterYearPart, Text.Length(AfterYearPart)-1)) else 
-     if Granularity = "Q" then (Number.From(Text.End(AfterYearPart, Text.Length(AfterYearPart)-1)) -1)  * 3 + 1 else 
-      if Granularity = "H" then (Number.From(Text.End(AfterYearPart, Text.Length(AfterYearPart)-1)) -1) * 6 + 1 else 
-       if Granularity = "W" then null else
-      Number.From(Text.Start(AfterYearPart,2) ),
-        DayXP = if Granularity = "Y" then 1 else 
-     if Granularity = "M" then 1 else 
-     if Granularity = "Q" then  1 else 
-      if Granularity = "H" then 1 else 
-      Number.From(Text.End(AfterYearPart,2) ),
-        CalculateDateFinal = if Granularity = "W" then Table.SelectRows( ISOData, each [Week Code]=Source)[Date]{0} else #date(Number.From(Year),MonthXP, DayXP),
-        AddedType = CalculateDateFinal as date
-    in
-        AddedType;
 
 ISOData =
 let
@@ -746,4 +744,4 @@ let
     #"Promoted Headers" = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
     #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Week Number", Int64.Type}, {"ISO Year", Int64.Type}, {"Date", type date}, {"Week Code", type text}})
 in
-    #"Changed Type";
+    Table.Buffer( #"Changed Type" );
