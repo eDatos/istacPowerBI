@@ -596,7 +596,7 @@ ISTAC.base = (url as text) =>
 let
     Source = Json.Document(Web.Contents(url)),
     Keys = List.Transform(Source[categories], each [variable]),
-    temporalDim= Source[temporals]{0} &".Código",
+    temporalDim= try Source[temporals]{0} &".Código" otherwise null,
     Rows = List.Transform(Source[data], each [Valor=[Valor]] & Record.FromList([dimCodes], Keys)),
     Data = Table.FromRecords(Rows),
     Cleaned = Table.SelectRows(Data, each [Valor] <> "." and [Valor] <> ".." and [Valor] <> "..."),
@@ -634,7 +634,7 @@ let
     #"Removed Columns" = Table.RemoveColumns(#"Added Custom5",{"Year", "AfterYearPart", "Granularity", "Date", "Month", "Day"}),
     #"Changed Type" = Table.TransformColumnTypes(#"Removed Columns",{{"Fecha", type date}, {"Título", type text}})
 in
-   #"Changed Type";
+   if temporalDim = null then WithTitle else #"Changed Type";
 
 // Función que se encarga de crear la tabla con datos de Clasificaciones a partir de una url
 GetClasificaciones = ( url as text) as table =>
