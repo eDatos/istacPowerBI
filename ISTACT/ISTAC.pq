@@ -23,7 +23,7 @@ NavigationType = type function () as table meta [
             {"Indicadores",      "indicators",  ISTAC.IndicatorNavTable() , "Folder",    "Indicator",    false}, 
             {"Cubos",      "Cubos",  ISTAC.CubosNavTable (), "Folder",    "Cubos",    false},
             {"Clasificaciones",      "Clasificaciones",  ISTAC.ClasificacionesNavTable(), "Folder",    "Clasificaciones",    false},
-            {"ISTAC.base", "ISTAC.base", ISTAC.base, "Function", "ISTAC.base", true}
+            {"ISTAC.base", "ISTAC.base", ISTAC.GETISTACbase, "Function", "ISTAC.base", true}
             }),
         NavTable = Table.ToNavigationTable(objects, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf") 
     in
@@ -85,6 +85,24 @@ url as (type text meta [
     ];
 
 ISTAC.GETClasificaciones = Value.ReplaceType(GetClasificaciones, fxClasificacionesType);
+
+
+// Metadatos para función ISTAC.GETDataset
+fxbaseType = type function (
+url as (type text meta [
+        Documentation.FieldCaption = "url",
+        Documentation.SampleValues = {"http://www.gobiernodecanarias.org/istac/jaxi-istac/tabla.do?accion=jsonMtd&uuidConsulta=a35ef358-5c0e-4dc0-b6f0-dc35bd608125"}
+    ])) as table meta [                  
+        Documentation.Name = "URL del cubo / consulta de datos de ISTAC-base",
+        Documentation.LongDescription = "Obtiene un cubo o dataset a partir de la url de un cubo de ISTAC-base",
+        Documentation.Examples = {[
+            Description = "Obtiene un cubo o dataset partir de una url",
+             Code = "Función(""http://www.gobiernodecanarias.org/istac/jaxi-istac/tabla.do?accion=jsonMtd&uuidConsulta=a35ef358-5c0e-4dc0-b6f0-dc35bd608125"")",
+            Result = "Una tabla con datos de Cubos / Datasets de ISTAC-base"
+        ]}
+    ];
+
+ISTAC.GETISTACbase = Value.ReplaceType(ISTAC.base, fxbaseType);
 
 // Metadatos para función ISTAC.GETClasificaciones
 fxClasificacionesType = type function (
