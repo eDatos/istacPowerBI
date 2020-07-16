@@ -20,7 +20,7 @@ NavigationType = type function () as table meta [
     let
         objects = #table(
             {"Name",       "Key",        "Data",                           "ItemKind", "ItemName", "IsLeaf"},{
-            {"Indicadores",      "indicators",  ISTAC.IndicatorNavTable() , "Folder",    "Indicator",    false}, 
+            {"Indicadores",      "Indicadores",  ISTAC.IndicatorNavTable() , "Folder",    "Indicator",    false}, 
             {"Cubos",      "Cubos",  ISTAC.CubosNavTable (), "Folder",    "Cubos",    false},
             {"Clasificaciones",      "Clasificaciones",  ISTAC.ClasificacionesNavTable(), "Folder",    "Clasificaciones",    false},
             {"ISTAC.base", "ISTAC.base", ISTAC.GETISTACbase, "Function", "ISTAC.base", true}
@@ -34,8 +34,8 @@ ISTAC.IndicatorNavTable = ()=>
       let
         objects = #table(
             {"Name",       "Key",        "Data",                           "ItemKind", "ItemName", "IsLeaf"},{
-            {"Por temas",      "indicators",  ISTAC.Indicadores() , "Folder",    "Por temas",    false},
-            {"Por sistemas de indicadores", "SystemIndicators", ISTAC.SystemIndicators(), "Folder", "Por sistemas de indicadores", false},
+            {"Por temas",      "Indicadores",  ISTAC.Indicadores() , "Folder",    "Por temas",    false},
+            {"Por sistemas de indicadores", "IndicadoresSistemas", ISTAC.SystemIndicators(), "Folder", "Por sistemas de indicadores", false},
             {"fx URL del indicador / instancia de indicador", "GETIndicadores", ISTAC.GETIndicadores, "Function", "fx URL del indicador / instancia de indicador", true}
            }),
         NavTable = Table.ToNavigationTable(objects, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf") 
@@ -48,7 +48,7 @@ ISTAC.CubosNavTable = ()=>
         objects = #table(
             {"Name",       "Key",        "Data",                           "ItemKind", "ItemName", "IsLeaf"},{
             {"Por operaciones estadísticas",      "Cubos",  ISTAC.SistemasEstadisticos (), "Folder",    "Por operaciones estadísticas",    false},
-            {"fx URL del cubo / consulta de datos", "GETClasificaciones", ISTAC.GETDataset, "Function", "fx URL del cubo / consulta de datos", true}
+            {"fx URL del cubo / consulta de datos", "GETCubos", ISTAC.GETDataset, "Function", "fx URL del cubo / consulta de datos", true}
            }),
         NavTable = Table.ToNavigationTable(objects, {"Key"}, "Name", "Data", "ItemKind", "ItemName", "IsLeaf") 
     in
