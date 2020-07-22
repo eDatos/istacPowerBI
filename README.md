@@ -1,6 +1,6 @@
 # istacPowerBI
 
-#### Extensión para Microsoft PowerBI de conexión a la Infraestructura de Datos y Metadatos Estadísticos de Canarias (eDatos) que permite la interoperabilidad de la herramienta con los datos abiertos publicados en eDatos con el fin de importarlos de manera automática y muy sencilla. La información que puede conectarse es lo siguiente:
+#### Extensión para Microsoft PowerBI de conexión a la Infraestructura de Datos y Metadatos Estadísticos de Canarias (eDatos) que permite la interoperabilidad de la herramienta con los datos abiertos publicados en eDatos con el fin de importarlos de manera automática y muy sencilla. La información que puede conectarse es la siguiente:
 
 1. Indicadores: Permite obtener los datos de los indicadores y sus instancias publicados en la API de indicadores (https://www.gobiernodecanarias.org/istac/api/indicators/v1.0/#)
 1. Cubos: Permite obtener los datos de los cubos de datos y sus consultas publicados en la API de recursos estadísticos (https://www.gobiernodecanarias.org/istac/api/statistical-resources/v1.0/) o de los cubos publicados en el actual sistema ISTAC.base que está en proceso de migración a e-Cubos (Statistical Resources).
