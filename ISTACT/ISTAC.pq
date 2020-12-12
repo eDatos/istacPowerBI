@@ -73,13 +73,13 @@ ISTAC.GETDataset = Value.ReplaceType(ISTAC.Dataset, fxCubosType);
 fxCubosType = type function (
 url as (type text meta [
         Documentation.FieldCaption = "url",
-        Documentation.SampleValues = {"https://www3.gobiernodecanarias.org/istac/api/statistical-resources/v1.0/datasets/ISTAC/C00010A_000001/001.005"}
+        Documentation.SampleValues = {"https://datos.canarias.es/api/estadisticas/statistical-resources/v1.0/datasets/ISTAC/C00010A_000001/001.005"}
     ])) as table meta [                  
         Documentation.Name = "URL del cubo / consulta de datos",
         Documentation.LongDescription = "Obtiene un cubo o dataset partir de una url",
         Documentation.Examples = {[
             Description = "Obtiene un cubo o dataset partir de una url",
-             Code = "Función(""https://www3.gobiernodecanarias.org/istac/api/statistical-resources/v1.0/datasets/ISTAC/C00010A_000001/001.005"")",
+             Code = "Función(""https://datos.canarias.es/api/estadisticas/statistical-resources/v1.0/datasets/ISTAC/C00010A_000001/001.005"")",
             Result = "Una tabla con datos de Cubos / Datasets"
         ]}
     ];
@@ -108,13 +108,13 @@ ISTAC.GETISTACbase = Value.ReplaceType(ISTAC.base, fxbaseType);
 fxClasificacionesType = type function (
 url as (type text meta [
         Documentation.FieldCaption = "url",
-        Documentation.SampleValues = {"https://www3.gobiernodecanarias.org/istac/api/structural-resources/v1.0/codelists/ISTAC/CL_AREA_ES70_DS_20030525/01.000"}
+        Documentation.SampleValues = {"https://datos.canarias.es/api/estadisticas/structural-resources/v1.0/codelists/ISTAC/CL_AREA_ES70_DS_20030525/01.000"}
     ])) as table meta [                  
         Documentation.Name = "URL de la clasificación",
         Documentation.LongDescription = "Obtiene los datos de clasificaciones a partir de una url",
         Documentation.Examples = {[
             Description = "Obtiene los datos de clasificaciones a partir de una url",
-             Code = "Función(""https://www3.gobiernodecanarias.org/istac/api/structural-resources/v1.0/codelists/ISTAC/CL_AREA_ES70_DS_20030525/01.000"")",
+             Code = "Función(""https://datos.canarias.es/api/estadisticas/structural-resources/v1.0/codelists/ISTAC/CL_AREA_ES70_DS_20030525/01.000"")",
             Result = "Una tabla con datos de Clasificaciones"
         ]}
     ];
@@ -126,13 +126,13 @@ ISTAC.GETIndicadores = Value.ReplaceType(TransformBinary.Indicadores, fxIndicado
 fxIndicadoresType = type function (
 url as (type text meta [
         Documentation.FieldCaption = "url",
-        Documentation.SampleValues = {"https://www3.gobiernodecanarias.org/istac/api/indicators/v1.0/indicators/AFILIACIONES", "https://www3.gobiernodecanarias.org/istac/api/indicators/v1.0/indicatorsSystems/C00062A/indicatorsInstances/84a4dd11-dbb7-4592-8799-516d9f432688"}
+        Documentation.SampleValues = {"https://datos.canarias.es/api/estadisticas/indicators/v1.0/indicators/AFILIACIONES", "https://datos.canarias.es/api/estadisticas/indicators/v1.0/indicatorsSystems/C00062A/indicatorsInstances/84a4dd11-dbb7-4592-8799-516d9f432688"}
     ])) as table meta [                  
         Documentation.Name = "URL del indicador / instancia de indicador",
         Documentation.LongDescription = "Obtiene los datos de indicadores y sistemas de indicadores a partir de una url",
         Documentation.Examples = {[
             Description = "Obtiene los datos de indicadores y sistemas de indicadores a partir de una url",
-            Code = "Función(""https://www3.gobiernodecanarias.org/istac/api/indicators/v1.0/indicators/AFILIACIONES"")",
+            Code = "Función(""https://datos.canarias.es/api/estadisticas/indicators/v1.0/indicators/AFILIACIONES"")",
             Result = "Una tabla con datos de indicadores"
 
         ]}
@@ -141,7 +141,7 @@ url as (type text meta [
 // Tabla de navegación para carpetas y tablas de indicadores
 ISTAC.Indicadores = () as table =>
  let
-     Source = ISTAC.AlternatePagination("https://www3.gobiernodecanarias.org/istac/api/indicators/v1.0/indicators?limit=1000", "items"),
+     Source = ISTAC.AlternatePagination("https://datos.canarias.es/api/estadisticas/indicators/v1.0/indicators?limit=1000", "items"),
     #"Expanded title" = Table.ExpandRecordColumn(Source, "title", {"es", "en", "__default__"}, {"title.es", "title.en", "title.__default__"}),
     #"Expanded subjectTitle" = Table.ExpandRecordColumn(#"Expanded title", "subjectTitle", {"es", "__default__"}, {"subjectTitle.es", "subjectTitle.__default__"}),
     #"Grouped Rows" = Table.Group(#"Expanded subjectTitle", {"subjectTitle.es", "subjectCode"}, {{"Data", each _, Value.Type(#"Expanded subjectTitle")  }}),
@@ -191,13 +191,13 @@ in
 // Tabla de navegación para carpetas y tablas de Sistemas de indicadores
 ISTAC.SistemasEstadisticos = () =>
     let
-    Source = ISTAC.AlternatePagination("https://www3.gobiernodecanarias.org/istac/api/operations/v1.0/operations?limit=1000", "operation"),
+    Source = ISTAC.AlternatePagination("https://datos.canarias.es/api/estadisticas/operations/v1.0/operations?limit=1000", "operation"),
     #"Expanded name" = Table.ExpandRecordColumn(Source, "name", {"text"}, {"name.text"}),
     #"Expanded name.text" = Table.ExpandListColumn(#"Expanded name", "name.text"),
     #"Expanded name.text1" = Table.ExpandRecordColumn(#"Expanded name.text", "name.text", {"value", "lang"}, {"name.text.value", "name.text.lang"}),
     #"Filtered Rows" = Table.SelectRows(#"Expanded name.text1", each ([name.text.lang] = "es")),
     #"Removed Columns" = Table.RemoveColumns(#"Filtered Rows",{"selfLink"}),
-    #"Added Custom" = Table.AddColumn(#"Removed Columns", "Data", each ISTAC.Cubos( "https://www3.gobiernodecanarias.org/istac/api/statistical-resources/v1.0/datasets?lang=es&limit=1000&query=STATISTICAL_OPERATION_URN EQ '" & Text.From([urn]) & "'")),
+    #"Added Custom" = Table.AddColumn(#"Removed Columns", "Data", each ISTAC.Cubos( "https://datos.canarias.es/api/estadisticas/statistical-resources/v1.0/datasets?lang=es&limit=1000&query=STATISTICAL_OPERATION_URN EQ '" & Text.From([urn]) & "'")),
     #"Removed Errors" = Table.RemoveRowsWithErrors(#"Added Custom", {"Data"}),
     #"Removed Columns1" = Table.RemoveColumns(#"Removed Errors",{"urn", "name.text.lang", "kind"}),
     #"Renamed Columns" = Table.RenameColumns(#"Removed Columns1",{{"id", "Key"}}),
@@ -223,7 +223,7 @@ ISTAC.Cubos = (url as text)=>
     #"Grouped Rows" = Table.Group(#"Expanded Custom", {"Agency", "value", "lang", "Resource"}, {{"Count", each _, type table [id=text, urn=text, href=text, value=text, lang=text, kind=text, Agency=text, Resource=text, Version=text]}}),
     #"Removed Columns" = Table.RemoveColumns(#"Grouped Rows",{"Count", "lang"}),
       #"Changed Type" = Table.TransformColumnTypes(#"Removed Columns",{{"Resource", type text}}),
-    #"Added Custom3" = Table.AddColumn(#"Changed Type", "Data", each ISTAC.Dataset("https://www3.gobiernodecanarias.org/istac/api/statistical-resources/v1.0/datasets/ISTAC/"&Text.From([Resource])&"/~latest.json")),
+    #"Added Custom3" = Table.AddColumn(#"Changed Type", "Data", each ISTAC.Dataset("https://datos.canarias.es/api/estadisticas/statistical-resources/v1.0/datasets/ISTAC/"&Text.From([Resource])&"/~latest.json")),
     RemoveAgency = Table.RemoveColumns(#"Added Custom3", {"Agency"} ),
     RenameColumns = Table.RenameColumns(RemoveAgency,{{"Resource", "Key"}, {"value", "ItemName"}}),
     AddItemKind = Table.AddColumn(RenameColumns, "ItemKind", each "Table"),
@@ -470,7 +470,7 @@ in
 // Tabla de navegación para carpetas y tablas de sistemas de indicadores
 ISTAC.SystemIndicators = () =>
     let
-    Source = ISTAC.SystemIndicatorPagination("https://www.gobiernodecanarias.org/istac/api/indicators/v1.0/indicatorsSystems", 1000),
+    Source = ISTAC.SystemIndicatorPagination("https://datos.canarias.es/api/estadisticas/indicators/v1.0/indicatorsSystems", 1000),
     #"Added Custom" = Table.AddColumn(Source, "Custom", each ISTAC.SystemIndicatorPagination([selfLink]&"/indicatorsInstances", 1000)),
     #"Expanded title" = Table.ExpandRecordColumn(#"Added Custom", "title", {"__default__"}, {"title.__default__"}),
     #"Renamed Columns" = Table.RenameColumns(#"Expanded title",{{"id", "Key"}, {"title.__default__", "Name"}}),
@@ -523,7 +523,7 @@ in
 // Tabla de navegación para carpetas y tablas de Clasificaciones
 ISTAC.VariableFamilies = () as table =>
   let
-   Source = ISTAC.AlternatePagination("https://www3.gobiernodecanarias.org/istac/api/structural-resources/v1.0/variablefamilies?limit=1000", "variableFamily"),
+   Source = ISTAC.AlternatePagination("https://datos.canarias.es/api/estadisticas/structural-resources/v1.0/variablefamilies?limit=1000", "variableFamily"),
     #"Expanded selfLink" = Table.ExpandRecordColumn(Source, "selfLink", {"kind", "href"}, {"kind.1", "href"}),
     #"Expanded name" = Table.ExpandRecordColumn(#"Expanded selfLink", "name", {"text"}, {"text"}),
     #"Expanded text" = Table.ExpandListColumn(#"Expanded name", "text"),
@@ -556,7 +556,7 @@ let
     #"Duplicated Column" = Table.DuplicateColumn(#"Renamed Columns", "Name", "ItemName"),
     #"Added Custom1" = Table.AddColumn(#"Duplicated Column", "IsLeaf", each false),
     AddItemKind = Table.AddColumn( #"Added Custom1", "ItemKind", each "Folder"),
-    #"Added Custom" = Table.AddColumn(AddItemKind, "Custom", each try ISTAC.AlternatePagination("https://www3.gobiernodecanarias.org/istac/api/structural-resources/v1.0/codelists?query=VARIABLE_URN%20EQ%20%22urn%3Asiemac%3Aorg.siemac.metamac.infomodel.structuralresources.Variable%3D" & [Key] & "%22 ", "codelist") otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error")),
+    #"Added Custom" = Table.AddColumn(AddItemKind, "Custom", each try ISTAC.AlternatePagination("https://datos.canarias.es/api/estadisticas/structural-resources/v1.0/codelists?query=VARIABLE_URN%20EQ%20%22urn%3Asiemac%3Aorg.siemac.metamac.infomodel.structuralresources.Variable%3D" & [Key] & "%22 ", "codelist") otherwise error Error.Record("Sin información", "Esta variable no contiene clasificaciones", "Error")),
     #"Added Custom2" = Table.AddColumn(#"Added Custom", "Data", each ISTAC.VariableFamiliesLevel3([Custom])),
     #"Removed Other Columns" = Table.SelectColumns(#"Added Custom2",{"Key", "Name", "ItemName", "IsLeaf", "ItemKind", "Data"}),
    RemoveLabels = Table.ReplaceValue(  #"Removed Other Columns" ,"Variable ","",Replacer.ReplaceText,{"Name"}),
