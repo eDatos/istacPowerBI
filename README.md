@@ -8,7 +8,7 @@
  
 #### Para instalar el conector debes seguir los siguientes pasos:
 
-1. Descargar el fichero ISTAC.mez del repositorio. 
+1. Descargar el fichero [ISTAC.mez](https://github.com/eDatos/istacPowerBI/raw/master/ISTAC.mez) desde este enlace.
 1. Instalar Power BI Desktop (https://powerbi.microsoft.com/es-es/downloads/ )
 1. Seguir los pasos para poder usar conectores no certificados: https://docs.microsoft.com/es-es/power-bi/desktop-connector-extensibility
 1. Según se indica en el paso 3 la carpeta de destino es: "[Documentos]\Power BI Desktop\Conectores personalizados". Pero puede ocurrir que esté configurado en inglés y por lo tanto la carpeta de destino sería: "[Documents]\Power BI Desktop\Custom Connectors"
